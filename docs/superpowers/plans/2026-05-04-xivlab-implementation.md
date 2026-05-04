@@ -874,7 +874,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 - Test: `tests/unit/test_password.py`
 - Test: `tests/integration/test_auth_register.py`
 
-- [ ] **Step 1: Test for password.hash + verify (RED)**
+- [x] **Step 1: Test for password.hash + verify (RED)**
 
 `tests/unit/test_password.py`:
 
@@ -895,7 +895,7 @@ def test_verify_wrong_password_fails():
 
 Run: `uv run pytest tests/unit/test_password.py -v` → FAIL (module missing).
 
-- [ ] **Step 2: Implement app/services/password.py**
+- [x] **Step 2: Implement app/services/password.py**
 
 ```python
 from passlib.context import CryptContext
@@ -913,7 +913,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 Run tests → PASS.
 
-- [ ] **Step 3: app/services/tokens.py**
+- [x] **Step 3: app/services/tokens.py**
 
 ```python
 import secrets
@@ -923,7 +923,7 @@ def random_token(nbytes: int = 32) -> str:
     return secrets.token_urlsafe(nbytes)
 ```
 
-- [ ] **Step 4: Test register endpoint (RED)**
+- [x] **Step 4: Test register endpoint (RED)**
 
 `tests/integration/test_auth_register.py`:
 
@@ -954,7 +954,7 @@ async def test_register_short_password_422(client):
 
 (Tests need a fresh DB per test; conftest will be expanded later. For now if collisions occur, tests assume happy path.)
 
-- [ ] **Step 5: app/schemas/auth.py**
+- [x] **Step 5: app/schemas/auth.py**
 
 ```python
 from pydantic import BaseModel, EmailStr, Field
@@ -973,7 +973,7 @@ class UserPublic(BaseModel):
     display_name: str | None
 ```
 
-- [ ] **Step 6: app/routers/auth.py (register only for now)**
+- [x] **Step 6: app/routers/auth.py (register only for now)**
 
 ```python
 from fastapi import APIRouter, HTTPException, status
@@ -1004,7 +1004,7 @@ async def register(payload: RegisterRequest) -> UserPublic:
         return UserPublic.model_validate(user, from_attributes=True)
 ```
 
-- [ ] **Step 7: Mount router in app/main.py**
+- [x] **Step 7: Mount router in app/main.py**
 
 Modify `create_app()` in `app/main.py`:
 
@@ -1014,7 +1014,7 @@ from app.routers import auth as auth_router
 app.include_router(auth_router.router)
 ```
 
-- [ ] **Step 8: Add fresh-db fixture in conftest.py**
+- [x] **Step 8: Add fresh-db fixture in conftest.py**
 
 Append to `tests/conftest.py`:
 
@@ -1048,7 +1048,7 @@ async def _reset_db():
     yield
 ```
 
-- [ ] **Step 9: Run tests**
+- [x] **Step 9: Run tests**
 
 ```bash
 uv run pytest tests/integration/test_auth_register.py tests/unit/test_password.py -v
@@ -1056,7 +1056,7 @@ uv run pytest tests/integration/test_auth_register.py tests/unit/test_password.p
 
 Expected: ALL PASS.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add app/services/password.py app/services/tokens.py app/schemas/auth.py app/routers/auth.py app/main.py tests/
