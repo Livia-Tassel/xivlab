@@ -1518,7 +1518,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 - Modify: `app/routers/auth.py`
 - Test: `tests/integration/test_password_reset.py`
 
-- [ ] **Step 1: Test (RED)**
+- [x] **Step 1: Test (RED)**
 
 `tests/integration/test_password_reset.py`:
 
@@ -1618,7 +1618,7 @@ async def reset_password(payload: ResetPasswordRequest):
 
 Add `PasswordResetToken` and `ForgotPasswordRequest`/`ResetPasswordRequest` to imports.
 
-- [ ] **Step 4: Run tests + commit**
+- [x] **Step 4: Run tests + commit**
 
 ```bash
 uv run pytest tests/integration/test_password_reset.py -v
