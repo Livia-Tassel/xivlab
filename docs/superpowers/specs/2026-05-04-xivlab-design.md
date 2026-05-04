@@ -109,12 +109,17 @@ Task:
   min_keyword_match: int = 1
   interest_description: str | None   # 自由文本，会被 embed
   max_papers_per_day: int = 10
-  delivery_time: str = "08:00"       # HH:MM, 用户 TZ
-  delivery_channels: list[str]       # ["email", "rss"]
-  rss_token: str                     # 自动生成 secret，URL 鉴权用
+  delivery_time: str = "08:00"       # HH:MM, 解释为用户的 tz 字段
+  delivery_channels: list[str]       # 子集 ⊆ {"email", "rss"}
+  rss_token: str                     # 32 字节 secrets.token_urlsafe(32)，URL 鉴权用
   enabled: bool = True
   created_at, updated_at: datetime
 ```
+
+**`delivery_channels` 与 RSS 的关系（明确）**：
+
+- RSS URL `/rss/{user_id}/{task_id}/feed.xml?token=...` **始终可访问**，只要 token 正确
+- `delivery_channels` 控制**主动推送**：只有 `"email" ∈ channels` 时才发邮件；`"rss" ∈ channels` 仅作为"用户声明在用 RSS"的语义标记，影响 dashboard 展示和后续统计，**不影响** feed 是否可访问
 
 **字段语义关系**：
 
@@ -147,12 +152,24 @@ for each enabled task:
   ├─ 对新增的每篇 paper 调 embedding API
   └─ 写 paper_vectors (sqlite-vec)
 
-[Cron 用户 delivery_time] 推送
-  ├─ for task in user.enabled_tasks:
-  │    Stage 1-5 筛选 → top N papers
-  │    渲染 email HTML/plain → 发送 (Resend API)
-  │    更新 deliveries 表
-  └─ 同时为 task 重新生成 RSS feed XML（缓存到磁盘）
+[Cron 每分钟 * * * * tick] 推送调度（精确到分钟）
+  算法（伪码）：
+    now_utc = datetime.utcnow().replace(second=0, microsecond=0)
+    SELECT u.id, u.tz FROM users u WHERE u.email_verified
+    for each user:
+      now_local = now_utc.astimezone(user.tz)
+      hh_mm = now_local.strftime("%H:%M")
+      tasks = SELECT * FROM tasks
+              WHERE user_id=? AND enabled
+                AND delivery_time = hh_mm
+                AND "email" IN delivery_channels
+      for task in tasks:
+        Stage 1-5 筛选 → top N papers
+        渲染 email HTML/plain → 发送 (Resend API)
+        upsert into deliveries (channel='email')
+
+  幂等性：deliveries 表 (task_id, paper_id, channel) 是 UNIQUE，
+         如果 cron 重跑同一分钟，相同 paper 不会被重复推送
 ```
 
 ### 3.4 RSS Feed
@@ -289,12 +306,14 @@ score = (upvotes - 1) / pow(hours_since_post + 2, 1.8)
 - 单用户每天最多上传 5 个 prompt
 - Title < 100 / body < 5000 字数硬限制
 - 后台手动审核：管理员（你）登录 `/admin/queue` 看新 pending → 通过/拒绝
-- 通过后 → published；拒绝 → 删除并记 reason
+- 通过后 → `status='published'`
+- 拒绝后 → `status='rejected'` + 写 `review_note`（**保留记录**，不硬删，方便作者看到反馈和申诉）
+- 仅 `status='published'` 的 prompt 出现在公开列表
 
 **v2**:
 
 - 关键词黑名单自动审核
-- 用户举报 + 累计阈值自动隐藏
+- 用户举报 → 累计阈值自动 `status='flagged'`
 
 ### 4.5 创作流程
 
@@ -343,7 +362,8 @@ CREATE TABLE prompts (
   upvotes INTEGER DEFAULT 0,
   copies INTEGER DEFAULT 0,
   views INTEGER DEFAULT 0,
-  status TEXT DEFAULT 'pending',         -- 'pending' / 'published' / 'flagged'
+  status TEXT DEFAULT 'pending',         -- 'pending' / 'published' / 'rejected' / 'flagged'
+  review_note TEXT,                       -- 拒绝原因（rejected 时）或 flag 原因
   forked_from_id INTEGER REFERENCES prompts(id),
   created_at, updated_at DATETIME
 );
@@ -522,6 +542,7 @@ def can_add_task(user_id: int) -> tuple[bool, str]:
 /dashboard              # 用户工作台（task 列表 + RSS URL）
 /dashboard/tasks/new
 /dashboard/tasks/{id}
+/dashboard/prompts      # 用户看自己上传过的 prompts（含 pending/rejected 状态 + 拒绝原因）
 /admin/queue            # 审核队列
 /health                 # 健康检查
 ```
@@ -645,7 +666,20 @@ server {
 | `db_backup` | 每天 04:00 UTC | sqlite3 .backup → 保留最近 14 天 |
 | `cleanup_sessions` | 每天 04:30 UTC | 删过期 sessions / 已用 tokens |
 
-每个任务执行写入 `cron_runs(id, name, started_at, ended_at, status, error)`，便于排查。
+每个任务执行写入 `cron_runs` 表，便于排查 + 启动时检查最近 24h 必跑任务是否有遗漏。
+
+```sql
+CREATE TABLE cron_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_name TEXT NOT NULL,                -- 'fetch_arxiv', 'send_digests', etc.
+  started_at DATETIME NOT NULL,
+  ended_at DATETIME,                     -- nullable: 仍在跑则为 NULL
+  status TEXT NOT NULL,                  -- 'running' / 'success' / 'failed'
+  error_message TEXT,                    -- failed 时填；不存堆栈，避免日志泄露
+  metadata JSON                          -- 任务相关元数据 (e.g. papers_fetched, emails_sent)
+);
+CREATE INDEX idx_cron_runs_job_started ON cron_runs(job_name, started_at DESC);
+```
 
 ### 6.5 .env 配置
 
@@ -790,13 +824,18 @@ GitHub Actions：
 
 ## 9. 开放问题 / 已知风险
 
-### 9.1 待确认
+### 9.1 待确认 / 实施期决策
 
-1. **域名**：xivLab 的子域名/独立域名待用户决定
-2. **管理员邮箱**：admin 账号用哪个邮箱（接收审核 / 错误告警）
-3. **Resend 账号**：用户是否已注册？发件域名 DNS 配置（DKIM/SPF）
-4. **Embedding provider**：MVP 默认 OpenAI；如果国内调不通，切智谱/SiliconFlow
-5. **Sub2api 配额**：实际剩余多少？决定 v1.1 LLM 摘要何时开
+下列项**不阻塞实施**，开发循环可使用以下默认值开工，最终值在生产部署前由用户敲定：
+
+| 项 | 开发期默认 | 生产期需用户决定 |
+|---|---|---|
+| 域名 | `xivlab.local`（dev）/ 由 `APP_BASE_URL` 环境变量参数化 | 用户挑选并配置 DNS |
+| 管理员邮箱 | `ADMIN_EMAILS` 环境变量；`scripts/create_admin.py` 引导创建首个 admin | 真实生产邮箱 |
+| Resend 账号 | dev 模式下用 mock email backend（写到 `data/sent_emails.log`） | 用户注册 Resend + 配置 DKIM/SPF |
+| Embedding provider | 默认 OpenAI；可通过 `EMBEDDING_PROVIDER` 切到 `zhipu`/`siliconflow` | 用户选择 + 提供 key |
+| Sub2api 配额 | MVP 不依赖 sub2api（无 LLM 摘要） | v1.1 启用 LLM 摘要前确认配额 |
+| Logo / 字体 / 配色 | 紧风格、深色友好、emoji 占位 🧪 | 用户决定品牌方向 |
 
 ### 9.2 风险
 
