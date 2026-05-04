@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Check your inbox · xivLab{% endblock %}
+{% block content %}
+<div class="max-w-md mx-auto bg-white border rounded-lg p-6 text-center">
+  <h1 class="text-xl font-semibold mb-4">Check your inbox 📧</h1>
+  {% if email %}
+    <p class="text-zinc-700">We sent a verification link to <strong>{{ email }}</strong>. Click it to activate your account.</p>
+  {% else %}
+    <p class="text-zinc-700">We sent you a verification link. Click it to activate your account.</p>
+  {% endif %}
+  <p class="text-xs text-zinc-500 mt-4">Didn't get it? Check your spam folder.</p>
+</div>
+{% endblock %}

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Email verification · xivLab{% endblock %}
+{% block content %}
+<div class="max-w-md mx-auto bg-white border rounded-lg p-6 text-center">
+  {% if ok %}
+    <h1 class="text-xl font-semibold mb-4">Email verified ✅</h1>
+    <p class="text-zinc-700">Your email is confirmed. <a href="/login" class="underline">Sign in</a> to continue.</p>
+  {% else %}
+    <h1 class="text-xl font-semibold mb-4">Invalid or expired link</h1>
+    <p class="text-zinc-700">This verification link doesn't work. Try registering again or contact support.</p>
+    <p class="mt-3"><a href="/register" class="underline">Register</a></p>
+  {% endif %}
+</div>
+{% endblock %}

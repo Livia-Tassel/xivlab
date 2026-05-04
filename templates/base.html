@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}xivLab{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+  <script defer src="https://unpkg.com/alpinejs@3"></script>
+</head>
+<body class="bg-zinc-50 text-zinc-900 antialiased">
+  <header class="border-b bg-white">
+    <nav class="mx-auto max-w-6xl flex items-center justify-between px-4 py-3">
+      <a href="/" class="font-semibold text-lg">🧪 xivLab</a>
+      <div class="space-x-4 text-sm">
+        <a href="/" class="hover:underline">Prompts</a>
+        <a href="/dashboard" class="hover:underline">Dashboard</a>
+        {% if user %}
+          <span class="text-zinc-500">{{ user.display_name or user.email }}</span>
+          <form action="/api/v1/auth/logout" method="post" class="inline">
+            <button class="hover:underline">Logout</button>
+          </form>
+        {% else %}
+          <a href="/login" class="hover:underline">Login</a>
+          <a href="/register" class="hover:underline font-medium">Register</a>
+        {% endif %}
+      </div>
+    </nav>
+  </header>
+  <main class="mx-auto max-w-6xl px-4 py-8">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="mx-auto max-w-6xl px-4 py-8 text-xs text-zinc-500">
+    xivLab — for researchers, by researchers.
+  </footer>
+</body>
+</html>

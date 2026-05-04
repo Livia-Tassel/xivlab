@@ -1643,7 +1643,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 - Modify: `app/main.py` (StaticFiles + pages router)
 - Test: `tests/integration/test_pages_auth.py`
 
-- [ ] **Step 1: Test renders (RED)**
+- [x] **Step 1: Test renders (RED)**
 
 `tests/integration/test_pages_auth.py`:
 
@@ -1669,7 +1669,7 @@ async def test_register_form_post_creates_user(client):
     assert r.status_code in (302, 303)
 ```
 
-- [ ] **Step 2: templates/base.html**
+- [x] **Step 2: templates/base.html**
 
 ```html
 <!doctype html>
@@ -1711,7 +1711,7 @@ async def test_register_form_post_creates_user(client):
 </html>
 ```
 
-- [ ] **Step 3: auth pages (login.html, register.html, etc.)**
+- [x] **Step 3: auth pages (login.html, register.html, etc.)**
 
 `templates/auth/login.html`:
 ```html
@@ -1764,7 +1764,7 @@ async def test_register_form_post_creates_user(client):
 
 (Create `forgot_password.html` and `reset_password.html` similarly — simple forms posting to the corresponding API endpoints.)
 
-- [ ] **Step 4: app/routers/pages.py**
+- [x] **Step 4: app/routers/pages.py**
 
 ```python
 from typing import Annotated
@@ -1844,7 +1844,7 @@ async def register_submit(
     )
 ```
 
-- [ ] **Step 5: Mount router + StaticFiles in main.py**
+- [x] **Step 5: Mount router + StaticFiles in main.py**
 
 ```python
 from fastapi.staticfiles import StaticFiles
@@ -1857,7 +1857,7 @@ app.include_router(pages_router.router)
 
 (Create empty `static/` dir if missing.)
 
-- [ ] **Step 6: Run tests + commit**
+- [x] **Step 6: Run tests + commit**
 
 ```bash
 uv run pytest tests/integration/test_pages_auth.py -v

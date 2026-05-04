@@ -1,36 +1,36 @@
 # xivLab Loop Status
 
-**Last updated**: 2026-05-04T20:50:00+08:00
-**Last completed Task**: T06 (Auth — Password Reset)
-**Next Task**: T07 (Frontend Foundation — Base Templates + Auth Pages)
-**Test suite**: green (32 passed)
+**Last updated**: 2026-05-04T21:15:00+08:00
+**Last completed Task**: T07 (Frontend Foundation — Base Templates + Auth Pages)
+**Next Task**: T08 (Module A — Tasks CRUD API + Quota)
+**Test suite**: green (41 passed)
 **Last commit**: pending — see git log after this iteration
 
-## Notes for next iteration
+## What's now usable end-to-end
 
-- The full auth surface is now stood up: register / verify-email / login / logout / me / forgot-password / reset-password. All endpoints under `/api/v1/auth/`.
-- `forgot-password`: anti-enumeration design — always returns 200, never reveals whether the email exists. The DB write + email send happens INSIDE the `session_scope` only when the user exists; the email send is hoisted OUTSIDE the session scope (after the commit) so we don't hold the DB connection during the network call.
-- `reset-password`: validates token (existence, not used, not expired), bcrypt-hashes the new password, marks token `used_at`. One-shot — second use returns 404.
-- 6 new password-reset integration tests added (happy-path + invalid-token + one-shot + short-password validation + anti-enumeration).
-- Phase 1 (Auth, T03–T06 in our numbering — actually T03–T06 in the plan map to T03 register, T04 login/logout/me, T05 verify-email, T06 password-reset) is **done**.
+- The HTML auth flow is wired: visit `/register` → submit form → redirected to `/verify-pending?email=…` → click link in email → `/verify-email/{token}` flips `email_verified=True` → `/login` → cookie set, redirected to `/dashboard` (a 404 for now — T08/T09 territory) → `/forgot-password` and `/reset-password/{token}` work the same way. All forms post to dedicated `pages.py` handlers (no client-side JS required).
+- `/static` is mounted but empty (placeholder `static/.gitkeep`). Tailwind + HTMX + Alpine load via CDN in `templates/base.html`.
 
-## Plan deviations / fixes this iteration
+## Plan deviations / notes
 
-- Added `test_reset_password_invalid_token_404`, `test_reset_password_token_is_one_shot`, `test_reset_password_short_password_422` beyond the plan's 3 tests. They cover invariants the plan implies but doesn't directly test. Cheap to add, raises confidence in the one-shot semantics that mirror the verify-email flow.
-- Email send for `forgot-password` is hoisted out of the DB transaction (vs the plan's inline `await send_email(...)` inside `session_scope`). A long network call shouldn't hold a SQLite write lock on a 2 vCPU box.
+- **Pages handlers call services directly** instead of re-invoking the API endpoints (the plan suggested `from app.routers.auth import login as api_login` + `redirect.raw_headers.extend(response.raw_headers)`). The plan's pattern works but cookie-header copying through Starlette internals is fragile and the duplicated logic is small. My version uses `RedirectResponse + set_cookie` which is idiomatic Starlette.
+- **Verify-email link is a GET** (the API endpoint stays POST for programmatic use). Real email clients don't POST — so `/verify-email/{token}` on the pages router consumes the token on GET and renders `auth/verify_result.html`. The JSON `POST /api/v1/auth/verify-email/{token}` is still there for SPA / API clients.
+- **Added `templates/auth/verify_result.html`** beyond the plan's 5 templates — it's the landing page after the user clicks the verify link.
+- Deprecation warnings still climbing (62 now). Will sweep in one go after Module A inserts settle.
 
 ## Open issues / TODOs
 
-- Cookie `secure=False` — pending T22 / T27.
-- `datetime.utcnow()` deprecation: 54 warnings now. Defer to a single sweep after Module A inserts stabilize (probably between T11 and T15).
-- `DEVELOPMENT_GUIDE.md` §11 wording fix (passlib → bcrypt) pending.
+- `/dashboard` is referenced from `/login` redirect and from `base.html` nav, but no route serves it yet. T09 creates it. Until then, post-login users see a 404. **Action item: T09 must land before any user-facing demo.**
+- Cookie `secure=False` still hardcoded. T22 / T27 owner.
+- `DEVELOPMENT_GUIDE.md` §11 wording (passlib → bcrypt) still pending.
 
-## What's next (T07 high-level reminder)
+## What's next (T08 high-level reminder)
 
-T07 is the frontend foundation:
-- `templates/base.html` — Tailwind CDN + HTMX, base layout with header/footer
-- `templates/auth/{login,register,verify,forgot,reset}.html` — server-rendered HTML pages backed by a `pages` router
-- `app/routers/pages.py` — GET `/`, `/login`, `/register`, etc. — these render Jinja2 templates and let HTMX handle the form posts (the underlying API endpoints are already done in T03–T06)
-- Wire Jinja2Templates into `app.main`
-- The forms POST to JSON endpoints we already built; HTMX response handling redirects on success.
-- Tests: smoke-check that `/login`, `/register` return 200 with HTML content-type. Don't go deeper than that — visual / browser testing isn't in the test budget.
+T08 is the start of Module A (arXiv 早报):
+- `app/schemas/tasks.py` — TaskCreate / TaskUpdate / TaskOut
+- `app/services/quota.py` — quota check (default 2 tasks per user, configurable via `TaskQuota.max_tasks`)
+- `app/routers/tasks.py` — CRUD: POST/GET/list/PATCH/DELETE under `/api/v1/tasks/*`
+- All endpoints require `current_user` + `require_email_verified` (verified-only invariant from spec §6.1)
+- POST creates `rss_token = secrets.token_urlsafe(32)` automatically
+- POST also embeds the `interest_description` to populate `task_embeddings.embedding` — but T11 owns the embedding pipeline. T08 should leave the embedding row blank or use a `MockBackend` returning zero-vectors; T11 will rewire.
+- Tests: happy CRUD; quota blocks third task; unverified user can't create.
