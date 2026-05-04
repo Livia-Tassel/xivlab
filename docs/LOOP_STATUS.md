@@ -1,37 +1,36 @@
 # xivLab Loop Status
 
-**Last updated**: 2026-05-04T20:35:00+08:00
-**Last completed Task**: T05 (Auth — Email Service + Verification)
-**Next Task**: T06 (Auth — Password Reset)
-**Test suite**: green (26 passed)
+**Last updated**: 2026-05-04T20:50:00+08:00
+**Last completed Task**: T06 (Auth — Password Reset)
+**Next Task**: T07 (Frontend Foundation — Base Templates + Auth Pages)
+**Test suite**: green (32 passed)
 **Last commit**: pending — see git log after this iteration
 
 ## Notes for next iteration
 
-- `app/services/email.py` exposes `send_email(to, subject, html, text)` with two backends:
-  - `MockEmailBackend` (default in tests/dev) — records each call on the class-level `sent: list[SentEmail]`. Tests inspect this list.
-  - `ResendBackend` — uses `resend.Emails.send_async` (the SDK's native async surface, not `asyncio.to_thread` over the sync API as the plan suggested). Imports `resend` lazily inside the method so test envs without an API key don't have to install it.
-- Registration flow now: insert user → flush → insert `EmailVerificationToken` (48h expiry) → commit → refresh user → build `UserPublic` → release session → send email → return UserPublic.
-- The verify URL in the email is `{settings.app_base_url}/verify-email/{token}` — that's a frontend route. The email's link points users to a future T07 page that POSTs to `/api/v1/auth/verify-email/{token}`.
-- `POST /api/v1/auth/verify-email/{token}` returns 200 + `{"ok": True}` on success, 404 on missing/expired/used token. Tokens are one-shot (`used_at` is stamped on consumption).
-- The autouse `_reset_db` conftest fixture now also calls `MockEmailBackend.reset()` so emails don't bleed between tests.
+- The full auth surface is now stood up: register / verify-email / login / logout / me / forgot-password / reset-password. All endpoints under `/api/v1/auth/`.
+- `forgot-password`: anti-enumeration design — always returns 200, never reveals whether the email exists. The DB write + email send happens INSIDE the `session_scope` only when the user exists; the email send is hoisted OUTSIDE the session scope (after the commit) so we don't hold the DB connection during the network call.
+- `reset-password`: validates token (existence, not used, not expired), bcrypt-hashes the new password, marks token `used_at`. One-shot — second use returns 404.
+- 6 new password-reset integration tests added (happy-path + invalid-token + one-shot + short-password validation + anti-enumeration).
+- Phase 1 (Auth, T03–T06 in our numbering — actually T03–T06 in the plan map to T03 register, T04 login/logout/me, T05 verify-email, T06 password-reset) is **done**.
 
-## Plan deviations (deliberate, documented)
+## Plan deviations / fixes this iteration
 
-- Switched `ResendBackend` to use the SDK's native `Emails.send_async` instead of the plan's `asyncio.to_thread(Emails.send, ...)`. The native async path is cleaner and the plan's pattern would still work; this is purely a quality bump.
-- Typed the Resend params dict as `resend.Emails.SendParams` (which the SDK exposes) so pyright's strict TypedDict check passes without `# type: ignore`.
+- Added `test_reset_password_invalid_token_404`, `test_reset_password_token_is_one_shot`, `test_reset_password_short_password_422` beyond the plan's 3 tests. They cover invariants the plan implies but doesn't directly test. Cheap to add, raises confidence in the one-shot semantics that mirror the verify-email flow.
+- Email send for `forgot-password` is hoisted out of the DB transaction (vs the plan's inline `await send_email(...)` inside `session_scope`). A long network call shouldn't hold a SQLite write lock on a 2 vCPU box.
 
 ## Open issues / TODOs
 
-- Cookie `secure=False` still hardcoded in login. **T22 / T27 owner**: read `settings.app_env` and flip to `secure=settings.app_env == "prod"`.
-- `datetime.utcnow()` deprecation warnings now at 39 (every register/login/verify path triggers ORM defaults). Defer the sweep — purely cosmetic.
-- `DEVELOPMENT_GUIDE.md` §11 still says "passlib" — pending one-line edit.
+- Cookie `secure=False` — pending T22 / T27.
+- `datetime.utcnow()` deprecation: 54 warnings now. Defer to a single sweep after Module A inserts stabilize (probably between T11 and T15).
+- `DEVELOPMENT_GUIDE.md` §11 wording fix (passlib → bcrypt) pending.
 
-## What's next (T06 high-level reminder)
+## What's next (T07 high-level reminder)
 
-- `app/schemas/auth.py` — add `ForgotPasswordRequest`, `ResetPasswordRequest`.
-- New endpoints under `/api/v1/auth/`:
-  - `POST /forgot-password` — always returns 200 (anti-enumeration). Internally: if email exists, create `PasswordResetToken` (48h), email a reset link.
-  - `POST /reset-password` — body `{ token, new_password }`. Validates token, hashes new password, marks token used.
-- Tests: forgot-password is idempotent on missing email; reset-password rejects invalid/expired tokens; old password no longer works after reset.
-- Email rendering can stay inline (no Jinja2 templates yet — that's T07's job).
+T07 is the frontend foundation:
+- `templates/base.html` — Tailwind CDN + HTMX, base layout with header/footer
+- `templates/auth/{login,register,verify,forgot,reset}.html` — server-rendered HTML pages backed by a `pages` router
+- `app/routers/pages.py` — GET `/`, `/login`, `/register`, etc. — these render Jinja2 templates and let HTMX handle the form posts (the underlying API endpoints are already done in T03–T06)
+- Wire Jinja2Templates into `app.main`
+- The forms POST to JSON endpoints we already built; HTMX response handling redirects on success.
+- Tests: smoke-check that `/login`, `/register` return 200 with HTML content-type. Don't go deeper than that — visual / browser testing isn't in the test budget.

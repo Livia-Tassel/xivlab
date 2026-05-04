@@ -1562,7 +1562,7 @@ async def test_forgot_unknown_email_silent(client):
     assert r.status_code == 200
 ```
 
-- [ ] **Step 2: Schemas**
+- [x] **Step 2: Schemas**
 
 ```python
 class ForgotPasswordRequest(BaseModel):
@@ -1574,7 +1574,7 @@ class ResetPasswordRequest(BaseModel):
     new_password: str = Field(min_length=8, max_length=128)
 ```
 
-- [ ] **Step 3: Endpoints in routers/auth.py**
+- [x] **Step 3: Endpoints in routers/auth.py**
 
 ```python
 @router.post("/forgot-password")

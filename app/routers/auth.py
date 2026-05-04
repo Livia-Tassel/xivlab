@@ -6,8 +6,14 @@ from sqlalchemy import select
 from app.config import get_settings
 from app.db import session_scope
 from app.deps import COOKIE_NAME
-from app.models import EmailVerificationToken, User
-from app.schemas.auth import LoginRequest, RegisterRequest, UserPublic
+from app.models import EmailVerificationToken, PasswordResetToken, User
+from app.schemas.auth import (
+    ForgotPasswordRequest,
+    LoginRequest,
+    RegisterRequest,
+    ResetPasswordRequest,
+    UserPublic,
+)
 from app.services.email import send_email
 from app.services.password import hash_password, verify_password
 from app.services.session import SESSION_LIFETIME, create_session, delete_session
@@ -16,6 +22,7 @@ from app.services.tokens import random_token
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 VERIFY_TOKEN_LIFETIME = timedelta(hours=48)
+PASSWORD_RESET_LIFETIME = timedelta(hours=48)
 
 
 @router.post("/register", response_model=UserPublic, status_code=status.HTTP_201_CREATED)
@@ -71,6 +78,66 @@ async def verify_email(token: str) -> dict[str, bool]:
         user = (await s.execute(select(User).where(User.id == evt.user_id))).scalar_one()
         user.email_verified = True
         evt.used_at = datetime.utcnow()
+        await s.commit()
+    return {"ok": True}
+
+
+@router.post("/forgot-password")
+async def forgot_password(payload: ForgotPasswordRequest) -> dict[str, bool]:
+    """Request a password reset link.
+
+    Always returns 200 — even when the email isn't registered — to avoid
+    leaking which emails have accounts (anti-enumeration). When the email
+    DOES exist, a reset token is created and a reset email dispatched.
+    """
+    token_value: str | None = None
+    user_email: str | None = None
+    async with session_scope() as s:
+        user = (
+            await s.execute(select(User).where(User.email == payload.email))
+        ).scalar_one_or_none()
+        if user is not None:
+            token_value = random_token(32)
+            s.add(
+                PasswordResetToken(
+                    token=token_value,
+                    user_id=user.id,
+                    expires_at=datetime.utcnow() + PASSWORD_RESET_LIFETIME,
+                )
+            )
+            await s.commit()
+            user_email = user.email
+
+    if token_value is not None and user_email is not None:
+        settings = get_settings()
+        url = f"{settings.app_base_url}/reset-password/{token_value}"
+        await send_email(
+            to=user_email,
+            subject="[xivLab] Reset your password",
+            html=(
+                "<p>Click the link to reset your password: "
+                f'<a href="{url}">{url}</a>. '
+                "This link expires in 48 hours.</p>"
+            ),
+            text=(f"Click the link to reset your password: {url}\nThis link expires in 48 hours."),
+        )
+
+    return {"ok": True}
+
+
+@router.post("/reset-password")
+async def reset_password(payload: ResetPasswordRequest) -> dict[str, bool]:
+    async with session_scope() as s:
+        tok = (
+            await s.execute(
+                select(PasswordResetToken).where(PasswordResetToken.token == payload.token)
+            )
+        ).scalar_one_or_none()
+        if tok is None or tok.used_at is not None or tok.expires_at < datetime.utcnow():
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Invalid or expired token")
+        user = (await s.execute(select(User).where(User.id == tok.user_id))).scalar_one()
+        user.password_hash = hash_password(payload.new_password)
+        tok.used_at = datetime.utcnow()
         await s.commit()
     return {"ok": True}
 
