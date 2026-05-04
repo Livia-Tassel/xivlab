@@ -1877,7 +1877,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 - Create: `app/routers/tasks.py`
 - Test: `tests/integration/test_tasks_crud.py`
 
-- [ ] **Step 1: Test (RED)**
+- [x] **Step 1: Test (RED)**
 
 `tests/integration/test_tasks_crud.py`:
 
@@ -1949,7 +1949,7 @@ async def test_regenerate_rss_token(client):
     assert r2.json()["rss_token"] != old
 ```
 
-- [ ] **Step 2: app/services/quota.py**
+- [x] **Step 2: app/services/quota.py**
 
 ```python
 from sqlalchemy import select, func
@@ -1978,7 +1978,7 @@ async def can_add_task(s: AsyncSession, user_id: int) -> tuple[bool, str]:
     return False, f"Already at limit ({q.max_tasks}). Buy credits to extend."
 ```
 
-- [ ] **Step 3: app/schemas/tasks.py**
+- [x] **Step 3: app/schemas/tasks.py**
 
 ```python
 from datetime import datetime
@@ -2032,7 +2032,7 @@ class TaskOut(BaseModel):
     updated_at: datetime
 ```
 
-- [ ] **Step 4: app/routers/tasks.py**
+- [x] **Step 4: app/routers/tasks.py**
 
 ```python
 from typing import Annotated
@@ -2127,7 +2127,7 @@ async def regen_rss(task_id: int, user: Annotated[User, Depends(require_email_ve
 
 Mount in `app/main.py`.
 
-- [ ] **Step 5: Run tests + commit**
+- [x] **Step 5: Run tests + commit**
 
 ```bash
 uv run pytest tests/integration/test_tasks_crud.py -v

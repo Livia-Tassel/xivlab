@@ -1,36 +1,39 @@
 # xivLab Loop Status
 
-**Last updated**: 2026-05-04T21:15:00+08:00
-**Last completed Task**: T07 (Frontend Foundation — Base Templates + Auth Pages)
-**Next Task**: T08 (Module A — Tasks CRUD API + Quota)
-**Test suite**: green (41 passed)
+**Last updated**: 2026-05-04T21:35:00+08:00
+**Last completed Task**: T08 (Module A — Tasks CRUD API + Quota)
+**Next Task**: T09 (Tasks Dashboard UI)
+**Test suite**: green (54 passed)
 **Last commit**: pending — see git log after this iteration
 
-## What's now usable end-to-end
+## What's now usable
 
-- The HTML auth flow is wired: visit `/register` → submit form → redirected to `/verify-pending?email=…` → click link in email → `/verify-email/{token}` flips `email_verified=True` → `/login` → cookie set, redirected to `/dashboard` (a 404 for now — T08/T09 territory) → `/forgot-password` and `/reset-password/{token}` work the same way. All forms post to dedicated `pages.py` handlers (no client-side JS required).
-- `/static` is mounted but empty (placeholder `static/.gitkeep`). Tailwind + HTMX + Alpine load via CDN in `templates/base.html`.
+- The Task CRUD API is live: `POST /api/v1/tasks`, `GET /api/v1/tasks`, `GET /api/v1/tasks/{id}`, `PATCH`, `DELETE`, plus `POST /{id}/regenerate-rss-token`. All require an authenticated **and email-verified** user (the `require_email_verified` dep).
+- Quota: 2 free tasks per user. Third returns 403 with a "limit / buy credits" message. `TaskQuota` row is auto-created on first check and stays at the user-level max (admin can bump in T24).
+- `TaskCreate` validators: `arxiv_categories` non-empty list, `delivery_time` matches `HH:MM` 24-hour format (validates 00:00–23:59), `delivery_channels` ⊆ {email, rss} and non-empty, `max_papers_per_day` 1–50, `interest_description` ≤ 1000 chars.
+- Per-user isolation verified: a user can't see or operate on another user's tasks (404 across the board).
 
-## Plan deviations / notes
+## Plan deviations / hardenings
 
-- **Pages handlers call services directly** instead of re-invoking the API endpoints (the plan suggested `from app.routers.auth import login as api_login` + `redirect.raw_headers.extend(response.raw_headers)`). The plan's pattern works but cookie-header copying through Starlette internals is fragile and the duplicated logic is small. My version uses `RedirectResponse + set_cookie` which is idiomatic Starlette.
-- **Verify-email link is a GET** (the API endpoint stays POST for programmatic use). Real email clients don't POST — so `/verify-email/{token}` on the pages router consumes the token on GET and renders `auth/verify_result.html`. The JSON `POST /api/v1/auth/verify-email/{token}` is still there for SPA / API clients.
-- **Added `templates/auth/verify_result.html`** beyond the plan's 5 templates — it's the landing page after the user clicks the verify link.
-- Deprecation warnings still climbing (62 now). Will sweep in one go after Module A inserts settle.
+- The plan's `delivery_time` regex was `^\d{2}:\d{2}$` which accepts garbage like `99:99`. Tightened to `^(?:[01]\d|2[0-3]):[0-5]\d$`. Added a test (`test_create_rejects_bad_delivery_time`) that exercises this.
+- The plan's TaskUpdate had no validators. Mirrored the TaskCreate validators where `is None` short-circuits (PATCH semantics).
+- Added 8 tests beyond the plan's 5 (single-task GET, cross-user 404, PATCH, DELETE, unauthenticated 401, empty categories 422, invalid channel 422, bad delivery time 422). Each is a single quick check.
+- `list_tasks` orders by `created_at DESC` so the newest task appears first — mirrors how the dashboard UI in T09 will want to render.
 
 ## Open issues / TODOs
 
-- `/dashboard` is referenced from `/login` redirect and from `base.html` nav, but no route serves it yet. T09 creates it. Until then, post-login users see a 404. **Action item: T09 must land before any user-facing demo.**
-- Cookie `secure=False` still hardcoded. T22 / T27 owner.
+- The `task_embeddings` row is NOT created on `POST /api/v1/tasks`. The plan deliberately defers that to T11 (embedding service). When `interest_description` is set, the embedding will be backfilled by T11's pipeline. **Don't forget**: T11 must hook into POST and PATCH (re-embed when `interest_description` changes).
+- Cookie `secure=False` still hardcoded — T22 / T27.
+- `datetime.utcnow()` deprecation: 188 warnings now. Sweep planned around T15 (after the cron pipelines settle).
 - `DEVELOPMENT_GUIDE.md` §11 wording (passlib → bcrypt) still pending.
+- `/dashboard` still 404s; T09 owns it.
 
-## What's next (T08 high-level reminder)
+## What's next (T09 high-level reminder)
 
-T08 is the start of Module A (arXiv 早报):
-- `app/schemas/tasks.py` — TaskCreate / TaskUpdate / TaskOut
-- `app/services/quota.py` — quota check (default 2 tasks per user, configurable via `TaskQuota.max_tasks`)
-- `app/routers/tasks.py` — CRUD: POST/GET/list/PATCH/DELETE under `/api/v1/tasks/*`
-- All endpoints require `current_user` + `require_email_verified` (verified-only invariant from spec §6.1)
-- POST creates `rss_token = secrets.token_urlsafe(32)` automatically
-- POST also embeds the `interest_description` to populate `task_embeddings.embedding` — but T11 owns the embedding pipeline. T08 should leave the embedding row blank or use a `MockBackend` returning zero-vectors; T11 will rewire.
-- Tests: happy CRUD; quota blocks third task; unverified user can't create.
+T09 is the user-facing Tasks dashboard:
+- `templates/dashboard/tasks.html` — list of tasks with name, categories, status, edit / delete buttons. Empty state with "Create your first task" CTA.
+- `templates/dashboard/task_form.html` — create / edit form. Uses HTMX for inline submission.
+- `app/routers/dashboard.py` (or extend `pages.py`) — GET `/dashboard`, GET `/dashboard/tasks/new`, GET `/dashboard/tasks/{id}/edit`, POST handlers for forms.
+- All require email-verified user; redirect unverified users to `/verify-pending`.
+- Tests: `/dashboard` renders task list, create form posts → 303 redirect, edit pre-fills.
+- Plan/spec also has a `/dashboard/prompts` page (T19+) — out of scope for T09.
