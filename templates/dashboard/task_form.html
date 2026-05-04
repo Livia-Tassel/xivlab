@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}{% if task %}Edit task{% else %}New task{% endif %} · xivLab{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto bg-white border rounded-lg p-6">
+  <h1 class="text-xl font-semibold mb-4">{% if task %}Edit task{% else %}New task{% endif %}</h1>
+  {% if error %}<p class="text-red-600 text-sm mb-3">{{ error }}</p>{% endif %}
+
+  <form method="post" action="{% if task %}/dashboard/tasks/{{ task.id }}{% else %}/dashboard/tasks{% endif %}" class="space-y-4">
+    <div>
+      <label class="block text-sm font-medium mb-1">Name</label>
+      <input
+        name="name" required maxlength="100"
+        value="{{ form.name if form else (task.name if task else '') }}"
+        placeholder="e.g. LLM agents and tool use"
+        class="w-full border rounded px-3 py-2"/>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1">arXiv categories <span class="text-zinc-500 font-normal">(comma-separated)</span></label>
+      <input
+        name="arxiv_categories" required
+        value="{{ form.arxiv_categories if form else (task.arxiv_categories|join(', ') if task else '') }}"
+        placeholder="cs.AI, cs.LG, stat.ML"
+        class="w-full border rounded px-3 py-2"/>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1">Keywords <span class="text-zinc-500 font-normal">(optional, comma-separated)</span></label>
+      <input
+        name="keywords"
+        value="{{ form.keywords if form else (task.keywords|join(', ') if task and task.keywords else '') }}"
+        placeholder="LLM agent, tool use, RAG"
+        class="w-full border rounded px-3 py-2"/>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1">Min keyword matches</label>
+      <input
+        type="number" name="min_keyword_match" min="1" max="10"
+        value="{{ form.min_keyword_match if form else (task.min_keyword_match if task else 1) }}"
+        class="w-32 border rounded px-3 py-2"/>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1">Interest description <span class="text-zinc-500 font-normal">(optional, used for semantic ranking)</span></label>
+      <textarea
+        name="interest_description" maxlength="1000" rows="3"
+        placeholder="What kinds of papers excite you? Free-form."
+        class="w-full border rounded px-3 py-2">{{ form.interest_description if form else (task.interest_description or '' if task else '') }}</textarea>
+    </div>
+
+    <div class="flex gap-4">
+      <div>
+        <label class="block text-sm font-medium mb-1">Max papers / day</label>
+        <input
+          type="number" name="max_papers_per_day" min="1" max="50"
+          value="{{ form.max_papers_per_day if form else (task.max_papers_per_day if task else 10) }}"
+          class="w-32 border rounded px-3 py-2"/>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1">Delivery time</label>
+        <input
+          type="time" name="delivery_time"
+          value="{{ form.delivery_time if form else (task.delivery_time if task else '08:00') }}"
+          class="w-32 border rounded px-3 py-2"/>
+      </div>
+    </div>
+
+    <fieldset>
+      <legend class="text-sm font-medium mb-1">Delivery channels</legend>
+      {% set channels = (form.delivery_channels if form else (task.delivery_channels if task else ['email'])) %}
+      <label class="inline-flex items-center gap-2 mr-4">
+        <input type="checkbox" name="delivery_channels" value="email" {% if 'email' in channels %}checked{% endif %}/>
+        Email
+      </label>
+      <label class="inline-flex items-center gap-2">
+        <input type="checkbox" name="delivery_channels" value="rss" {% if 'rss' in channels %}checked{% endif %}/>
+        RSS
+      </label>
+    </fieldset>
+
+    <div class="flex justify-end gap-2 pt-2">
+      <a href="/dashboard" class="px-3 py-2 text-sm hover:underline">Cancel</a>
+      <button class="bg-zinc-900 text-white px-4 py-2 rounded">
+        {% if task %}Save changes{% else %}Create task{% endif %}
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}

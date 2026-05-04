@@ -2147,7 +2147,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 - Modify: `app/routers/pages.py` (dashboard routes)
 - Test: `tests/integration/test_pages_dashboard.py`
 
-- [ ] **Step 1: Test (RED)**
+- [x] **Step 1: Test (RED)**
 
 ```python
 async def test_dashboard_requires_login(client):
@@ -2163,7 +2163,7 @@ async def test_dashboard_lists_user_tasks(client):
     assert "LLM agents" in r.text
 ```
 
-- [ ] **Step 2: Templates**
+- [x] **Step 2: Templates**
 
 `templates/dashboard/index.html`:
 ```html
@@ -2205,7 +2205,7 @@ async def test_dashboard_lists_user_tasks(client):
 
 `templates/dashboard/task_form.html` — form for create/edit (similar pattern, posts to `/dashboard/tasks` or `/dashboard/tasks/{id}`).
 
-- [ ] **Step 3: Pages router**
+- [x] **Step 3: Pages router**
 
 ```python
 from app.deps import current_user
@@ -2238,7 +2238,7 @@ async def new_task_page(request: Request, session: Annotated[str | None, Cookie(
 # Post handler delegates to API + redirects
 ```
 
-- [ ] **Step 4: Run tests + commit**
+- [x] **Step 4: Run tests + commit**
 
 ```bash
 uv run pytest tests/integration/test_pages_dashboard.py -v

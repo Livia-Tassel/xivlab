@@ -1,39 +1,38 @@
 # xivLab Loop Status
 
-**Last updated**: 2026-05-04T21:35:00+08:00
-**Last completed Task**: T08 (Module A — Tasks CRUD API + Quota)
-**Next Task**: T09 (Tasks Dashboard UI)
-**Test suite**: green (54 passed)
+**Last updated**: 2026-05-04T22:00:00+08:00
+**Last completed Task**: T09 (Tasks Dashboard UI)
+**Next Task**: T10 (arXiv Fetcher Service)
+**Test suite**: green (66 passed)
 **Last commit**: pending — see git log after this iteration
 
 ## What's now usable
 
-- The Task CRUD API is live: `POST /api/v1/tasks`, `GET /api/v1/tasks`, `GET /api/v1/tasks/{id}`, `PATCH`, `DELETE`, plus `POST /{id}/regenerate-rss-token`. All require an authenticated **and email-verified** user (the `require_email_verified` dep).
-- Quota: 2 free tasks per user. Third returns 403 with a "limit / buy credits" message. `TaskQuota` row is auto-created on first check and stays at the user-level max (admin can bump in T24).
-- `TaskCreate` validators: `arxiv_categories` non-empty list, `delivery_time` matches `HH:MM` 24-hour format (validates 00:00–23:59), `delivery_channels` ⊆ {email, rss} and non-empty, `max_papers_per_day` 1–50, `interest_description` ≤ 1000 chars.
-- Per-user isolation verified: a user can't see or operate on another user's tasks (404 across the board).
+- The full Module A user flow (sans the actual paper pipeline) is wired:
+  register → verify-email → login → land on `/dashboard` → see "Your tasks (0/2)" empty state → click "+ New task" → fill the form (categories comma-separated, optional keywords/description, time picker, channel checkboxes) → submit → redirected back to `/dashboard` with the task listed → edit / delete / regenerate-RSS-token via inline forms.
+- All `/dashboard*` routes redirect: `/login` (no session) or `/verify-pending?email=...` (logged in but unverified). The `_verified_user_or_redirect` helper centralizes this.
+- The "+ New task" button is conditionally rendered: hidden when the user is at quota.
 
 ## Plan deviations / hardenings
 
-- The plan's `delivery_time` regex was `^\d{2}:\d{2}$` which accepts garbage like `99:99`. Tightened to `^(?:[01]\d|2[0-3]):[0-5]\d$`. Added a test (`test_create_rejects_bad_delivery_time`) that exercises this.
-- The plan's TaskUpdate had no validators. Mirrored the TaskCreate validators where `is None` short-circuits (PATCH semantics).
-- Added 8 tests beyond the plan's 5 (single-task GET, cross-user 404, PATCH, DELETE, unauthenticated 401, empty categories 422, invalid channel 422, bad delivery time 422). Each is a single quick check.
-- `list_tasks` orders by `created_at DESC` so the newest task appears first — mirrors how the dashboard UI in T09 will want to render.
+- **Plan was sketchy** about the form post handler — said "delegates to API + redirects" without showing how. I implemented direct service-layer Task creation in pages.py (mirrors the existing pattern from T07 login/register). The CSV-split for `arxiv_categories` and `keywords` is done in the page handler before constructing the Pydantic `TaskCreate`.
+- The dashboard's task count display (`tasks|length / max_tasks`) reads `max_tasks` from the user's `TaskQuota` row (not the hardcoded constant the plan suggested). Admin can bump quotas later without a code change.
+- Added a confirm prompt on Delete via `onsubmit="return confirm(...)"`. Vanilla JS, no new deps.
+- Added a `details/summary` block to surface the RSS feed URL with a copy-friendly `<code>` block + a "Regenerate token" button. The plan only had inline `<code>`.
+- Added 12 tests vs the plan's 2 sketches: login/verify-pending redirects, empty state, populated state, form pre-fill, create/update/delete redirects, cross-user 404, quota hides button, validation re-renders form. Each one is a quick request.
 
 ## Open issues / TODOs
 
-- The `task_embeddings` row is NOT created on `POST /api/v1/tasks`. The plan deliberately defers that to T11 (embedding service). When `interest_description` is set, the embedding will be backfilled by T11's pipeline. **Don't forget**: T11 must hook into POST and PATCH (re-embed when `interest_description` changes).
+- The page-form invalid-input test originally tried `name=""` to trigger validation, but FastAPI's `Annotated[str, Form()]` rejects missing/empty strings before the handler runs (returns the default JSON 422). Switched the test to use `arxiv_categories="  "` (whitespace) which goes through the form layer and lands in my Pydantic-level validation. Worth knowing for T19+ when the prompt-create form gets similar tests.
 - Cookie `secure=False` still hardcoded — T22 / T27.
-- `datetime.utcnow()` deprecation: 188 warnings now. Sweep planned around T15 (after the cron pipelines settle).
+- `datetime.utcnow()`: 297 warnings (climbing). Sweep planned around T15.
 - `DEVELOPMENT_GUIDE.md` §11 wording (passlib → bcrypt) still pending.
-- `/dashboard` still 404s; T09 owns it.
+- The dashboard form sends `delivery_channels` as multiple form fields with the same name (HTML checkboxes). FastAPI's `Annotated[list[str] | None, Form()]` parses this. **Don't** add `Field(default_factory=...)` here — that interacts badly with Form parsing.
 
-## What's next (T09 high-level reminder)
+## What's next (T10 high-level reminder)
 
-T09 is the user-facing Tasks dashboard:
-- `templates/dashboard/tasks.html` — list of tasks with name, categories, status, edit / delete buttons. Empty state with "Create your first task" CTA.
-- `templates/dashboard/task_form.html` — create / edit form. Uses HTMX for inline submission.
-- `app/routers/dashboard.py` (or extend `pages.py`) — GET `/dashboard`, GET `/dashboard/tasks/new`, GET `/dashboard/tasks/{id}/edit`, POST handlers for forms.
-- All require email-verified user; redirect unverified users to `/verify-pending`.
-- Tests: `/dashboard` renders task list, create form posts → 303 redirect, edit pre-fills.
-- Plan/spec also has a `/dashboard/prompts` page (T19+) — out of scope for T09.
+T10 is the arXiv API client (no cron yet — T12 wires the cron job):
+- `app/services/arxiv_fetcher.py` — `fetch_recent(categories: list[str], since: datetime) -> list[Paper]`. Uses `feedparser` (already installed). Polite rate limit: 3.5s between calls.
+- arXiv API URL pattern: `http://export.arxiv.org/api/query?search_query=cat:cs.AI&sortBy=submittedDate&sortOrder=descending&max_results=...`.
+- Tests use `tests/fixtures/arxiv_response.xml` (sample fixture) and `unittest.mock.patch` to intercept the HTTP call. Never hit the real API.
+- Returns rich tuples or dataclasses, not ORM rows — T12 will own the persistence step.

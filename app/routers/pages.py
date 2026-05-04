@@ -19,10 +19,13 @@ from app.deps import COOKIE_NAME, current_user
 from app.models import (
     EmailVerificationToken,
     PasswordResetToken,
+    Task,
     User,
 )
+from app.schemas.tasks import TaskCreate, TaskUpdate
 from app.services.email import send_email
 from app.services.password import hash_password, verify_password
+from app.services.quota import DEFAULT_MAX_TASKS, can_add_task, get_or_create_quota
 from app.services.session import SESSION_LIFETIME, create_session
 from app.services.tokens import random_token
 
@@ -292,3 +295,310 @@ async def reset_password_submit(
     return templates.TemplateResponse(
         request, "auth/reset_password.html", {"user": None, "token": token, "done": True}
     )
+
+
+# --- Dashboard -------------------------------------------------------------
+
+
+def _split_csv(raw: str | None) -> list[str]:
+    """Split a comma-separated form value, drop blanks, trim whitespace."""
+    if not raw:
+        return []
+    return [piece.strip() for piece in raw.split(",") if piece.strip()]
+
+
+def _form_dict_from_request(
+    name: str,
+    arxiv_categories: str,
+    keywords: str,
+    interest_description: str,
+    min_keyword_match: int,
+    max_papers_per_day: int,
+    delivery_time: str,
+    delivery_channels: list[str],
+) -> dict[str, object]:
+    """Build the dict we pass back to the form template on validation errors."""
+    return {
+        "name": name,
+        "arxiv_categories": arxiv_categories,
+        "keywords": keywords,
+        "interest_description": interest_description,
+        "min_keyword_match": min_keyword_match,
+        "max_papers_per_day": max_papers_per_day,
+        "delivery_time": delivery_time,
+        "delivery_channels": delivery_channels,
+    }
+
+
+async def _verified_user_or_redirect(
+    session_token: str | None,
+) -> tuple[User | None, Response | None]:
+    """Resolve the verified user. Returns (user, None) on success, or
+    (None, redirect_response) when the caller should bail out with a redirect.
+    """
+    user = await _try_user(session_token)
+    if user is None:
+        return None, RedirectResponse("/login", status_code=303)
+    if not user.email_verified:
+        return None, RedirectResponse(f"/verify-pending?email={user.email}", status_code=303)
+    return user, None
+
+
+@router.get("/dashboard", response_class=HTMLResponse)
+async def dashboard_page(
+    request: Request,
+    session: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+) -> Response:
+    user, redirect = await _verified_user_or_redirect(session)
+    if redirect is not None:
+        return redirect
+    assert user is not None
+    async with session_scope() as s:
+        tasks = list(
+            (
+                await s.execute(
+                    select(Task).where(Task.user_id == user.id).order_by(Task.created_at.desc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        quota = await get_or_create_quota(s, user.id)
+        max_tasks = quota.max_tasks
+        await s.commit()
+    return templates.TemplateResponse(
+        request,
+        "dashboard/index.html",
+        {
+            "user": user,
+            "tasks": tasks,
+            "max_tasks": max_tasks,
+            "base_url": get_settings().app_base_url,
+        },
+    )
+
+
+@router.get("/dashboard/tasks/new", response_class=HTMLResponse)
+async def new_task_page(
+    request: Request,
+    session: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+) -> Response:
+    user, redirect = await _verified_user_or_redirect(session)
+    if redirect is not None:
+        return redirect
+    return templates.TemplateResponse(
+        request,
+        "dashboard/task_form.html",
+        {"user": user, "task": None, "form": None},
+    )
+
+
+@router.post("/dashboard/tasks")
+async def create_task_submit(
+    request: Request,
+    name: Annotated[str, Form()],
+    arxiv_categories: Annotated[str, Form()],
+    keywords: Annotated[str, Form()] = "",
+    interest_description: Annotated[str, Form()] = "",
+    min_keyword_match: Annotated[int, Form()] = 1,
+    max_papers_per_day: Annotated[int, Form()] = 10,
+    delivery_time: Annotated[str, Form()] = "08:00",
+    delivery_channels: Annotated[list[str] | None, Form()] = None,
+    session: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+) -> Response:
+    user, redirect = await _verified_user_or_redirect(session)
+    if redirect is not None:
+        return redirect
+    assert user is not None
+
+    channels = delivery_channels or ["email"]
+    form = _form_dict_from_request(
+        name,
+        arxiv_categories,
+        keywords,
+        interest_description,
+        min_keyword_match,
+        max_papers_per_day,
+        delivery_time,
+        channels,
+    )
+
+    try:
+        payload = TaskCreate(
+            name=name,
+            arxiv_categories=_split_csv(arxiv_categories),
+            keywords=_split_csv(keywords) or None,
+            min_keyword_match=min_keyword_match,
+            interest_description=interest_description.strip() or None,
+            max_papers_per_day=max_papers_per_day,
+            delivery_time=delivery_time,
+            delivery_channels=channels,
+        )
+    except ValueError as exc:
+        return templates.TemplateResponse(
+            request,
+            "dashboard/task_form.html",
+            {"user": user, "task": None, "form": form, "error": str(exc)},
+            status_code=422,
+        )
+
+    async with session_scope() as s:
+        ok, reason = await can_add_task(s, user.id)
+        if not ok:
+            return templates.TemplateResponse(
+                request,
+                "dashboard/task_form.html",
+                {"user": user, "task": None, "form": form, "error": reason},
+                status_code=403,
+            )
+        s.add(
+            Task(
+                user_id=user.id,
+                name=payload.name,
+                arxiv_categories=payload.arxiv_categories,
+                keywords=payload.keywords,
+                min_keyword_match=payload.min_keyword_match,
+                interest_description=payload.interest_description,
+                max_papers_per_day=payload.max_papers_per_day,
+                delivery_time=payload.delivery_time,
+                delivery_channels=payload.delivery_channels,
+                rss_token=random_token(32),
+                enabled=True,
+            )
+        )
+        await s.commit()
+
+    return RedirectResponse("/dashboard", status_code=303)
+
+
+@router.get("/dashboard/tasks/{task_id}", response_class=HTMLResponse)
+async def edit_task_page(
+    request: Request,
+    task_id: int,
+    session: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+) -> Response:
+    user, redirect = await _verified_user_or_redirect(session)
+    if redirect is not None:
+        return redirect
+    assert user is not None
+    async with session_scope() as s:
+        task = (
+            await s.execute(select(Task).where(Task.id == task_id, Task.user_id == user.id))
+        ).scalar_one_or_none()
+        if task is None:
+            return Response(status_code=404, content="Not found")
+    return templates.TemplateResponse(
+        request,
+        "dashboard/task_form.html",
+        {"user": user, "task": task, "form": None},
+    )
+
+
+@router.post("/dashboard/tasks/{task_id}")
+async def update_task_submit(
+    request: Request,
+    task_id: int,
+    name: Annotated[str, Form()],
+    arxiv_categories: Annotated[str, Form()],
+    keywords: Annotated[str, Form()] = "",
+    interest_description: Annotated[str, Form()] = "",
+    min_keyword_match: Annotated[int, Form()] = 1,
+    max_papers_per_day: Annotated[int, Form()] = 10,
+    delivery_time: Annotated[str, Form()] = "08:00",
+    delivery_channels: Annotated[list[str] | None, Form()] = None,
+    enabled: Annotated[bool, Form()] = True,
+    session: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+) -> Response:
+    user, redirect = await _verified_user_or_redirect(session)
+    if redirect is not None:
+        return redirect
+    assert user is not None
+
+    channels = delivery_channels or ["email"]
+    form = _form_dict_from_request(
+        name,
+        arxiv_categories,
+        keywords,
+        interest_description,
+        min_keyword_match,
+        max_papers_per_day,
+        delivery_time,
+        channels,
+    )
+
+    async with session_scope() as s:
+        task = (
+            await s.execute(select(Task).where(Task.id == task_id, Task.user_id == user.id))
+        ).scalar_one_or_none()
+        if task is None:
+            return Response(status_code=404, content="Not found")
+
+        try:
+            payload = TaskUpdate(
+                name=name,
+                arxiv_categories=_split_csv(arxiv_categories),
+                keywords=_split_csv(keywords) or None,
+                min_keyword_match=min_keyword_match,
+                interest_description=interest_description.strip() or None,
+                max_papers_per_day=max_papers_per_day,
+                delivery_time=delivery_time,
+                delivery_channels=channels,
+                enabled=enabled,
+            )
+        except ValueError as exc:
+            return templates.TemplateResponse(
+                request,
+                "dashboard/task_form.html",
+                {"user": user, "task": task, "form": form, "error": str(exc)},
+                status_code=422,
+            )
+
+        for field, value in payload.model_dump(exclude_unset=True).items():
+            setattr(task, field, value)
+        await s.commit()
+
+    return RedirectResponse("/dashboard", status_code=303)
+
+
+@router.post("/dashboard/tasks/{task_id}/delete")
+async def delete_task_submit(
+    task_id: int,
+    session: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+) -> Response:
+    user, redirect = await _verified_user_or_redirect(session)
+    if redirect is not None:
+        return redirect
+    assert user is not None
+    async with session_scope() as s:
+        task = (
+            await s.execute(select(Task).where(Task.id == task_id, Task.user_id == user.id))
+        ).scalar_one_or_none()
+        if task is not None:
+            await s.delete(task)
+            await s.commit()
+    return RedirectResponse("/dashboard", status_code=303)
+
+
+@router.post("/dashboard/tasks/{task_id}/regenerate-rss-token")
+async def regenerate_rss_submit(
+    task_id: int,
+    session: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+) -> Response:
+    user, redirect = await _verified_user_or_redirect(session)
+    if redirect is not None:
+        return redirect
+    assert user is not None
+    async with session_scope() as s:
+        task = (
+            await s.execute(select(Task).where(Task.id == task_id, Task.user_id == user.id))
+        ).scalar_one_or_none()
+        if task is not None:
+            task.rss_token = random_token(32)
+            await s.commit()
+    return RedirectResponse("/dashboard", status_code=303)
+
+
+# Compatibility shim — `DEFAULT_MAX_TASKS` is exported but the dashboard
+# reads the per-user value via ``get_or_create_quota``. Re-export so module
+# imports stay tidy.
+__all__ = ["DEFAULT_MAX_TASKS", "router"]

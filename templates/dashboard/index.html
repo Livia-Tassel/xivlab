@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · xivLab{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-semibold mb-6">Dashboard</h1>
+
+<section class="mb-8">
+  <div class="flex justify-between items-center mb-3">
+    <h2 class="text-lg font-medium">Your tasks ({{ tasks|length }}/{{ max_tasks }})</h2>
+    {% if tasks|length < max_tasks %}
+      <a href="/dashboard/tasks/new" class="bg-zinc-900 text-white px-3 py-1.5 rounded text-sm hover:bg-zinc-800">+ New task</a>
+    {% endif %}
+  </div>
+
+  {% if not tasks %}
+    <p class="text-zinc-500 border rounded-lg p-6 bg-white">
+      No tasks yet. Create one to start receiving daily arXiv digests.
+    </p>
+  {% else %}
+    <ul class="space-y-3">
+    {% for t in tasks %}
+      <li class="border rounded-lg p-4 bg-white">
+        <div class="flex justify-between items-start gap-4">
+          <div class="min-w-0 flex-1">
+            <h3 class="font-medium {% if not t.enabled %}text-zinc-400 line-through{% endif %}">
+              {{ t.name }}{% if not t.enabled %} <span class="text-xs">(paused)</span>{% endif %}
+            </h3>
+            <p class="text-xs text-zinc-500 mt-0.5">
+              Daily {{ t.delivery_time }} · categories: {{ t.arxiv_categories|join(', ') }}
+            </p>
+            {% if t.keywords %}
+              <p class="text-sm text-zinc-600 mt-1">Keywords: {{ t.keywords|join(', ') }}</p>
+            {% endif %}
+            {% if t.interest_description %}
+              <p class="text-sm text-zinc-600 mt-1 italic">"{{ t.interest_description }}"</p>
+            {% endif %}
+            <details class="mt-2 text-xs text-zinc-500">
+              <summary class="cursor-pointer hover:text-zinc-700">RSS feed</summary>
+              <code class="block bg-zinc-100 p-2 rounded mt-1 break-all">{{ base_url }}/rss/{{ user.id }}/{{ t.id }}/feed.xml?token={{ t.rss_token }}</code>
+              <form method="post" action="/dashboard/tasks/{{ t.id }}/regenerate-rss-token" class="inline">
+                <button type="submit" class="underline mt-1 hover:text-zinc-700">Regenerate token</button>
+              </form>
+            </details>
+          </div>
+          <div class="flex items-center gap-2 text-sm shrink-0">
+            <a href="/dashboard/tasks/{{ t.id }}" class="underline">Edit</a>
+            <form method="post" action="/dashboard/tasks/{{ t.id }}/delete" class="inline" onsubmit="return confirm('Delete this task?');">
+              <button type="submit" class="text-red-600 underline">Delete</button>
+            </form>
+          </div>
+        </div>
+      </li>
+    {% endfor %}
+    </ul>
+  {% endif %}
+</section>
+
+<section>
+  <h2 class="text-lg font-medium mb-2">Your prompts</h2>
+  <p class="text-sm text-zinc-500"><a href="/dashboard/prompts" class="underline">View all</a> (coming soon)</p>
+</section>
+{% endblock %}
