@@ -35,3 +35,8 @@ data/backups/
 
 # Static build
 static/dist/
+
+# Claude Code (machine-local; settings.local.json may contain credentials)
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+.claude/scheduled_tasks.json

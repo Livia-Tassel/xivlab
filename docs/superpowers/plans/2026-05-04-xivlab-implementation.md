@@ -174,7 +174,7 @@ xivlab/
 - Create: `tests/conftest.py`
 - Create: `tests/test_smoke.py`
 
-- [ ] **Step 1: pyproject.toml**
+- [x] **Step 1: pyproject.toml**
 
 ```toml
 [project]
@@ -221,7 +221,7 @@ pythonVersion = "3.12"
 typeCheckingMode = "basic"
 ```
 
-- [ ] **Step 2: ruff.toml**
+- [x] **Step 2: ruff.toml**
 
 ```toml
 line-length = 100
@@ -232,7 +232,7 @@ select = ["E", "F", "W", "I", "B", "UP", "N", "RUF"]
 ignore = ["E501"]
 ```
 
-- [ ] **Step 3: pytest.ini**
+- [x] **Step 3: pytest.ini**
 
 ```ini
 [pytest]
@@ -241,7 +241,7 @@ testpaths = tests
 addopts = -v --tb=short
 ```
 
-- [ ] **Step 4: .env.example**
+- [x] **Step 4: .env.example**
 
 ```
 APP_ENV=dev
@@ -264,7 +264,7 @@ OPENAI_API_KEY=
 ARXIV_CATEGORIES=cs.AI,cs.LG,cs.CL,cs.CV,cs.CR,cs.DB,cs.DC,cs.DS,cs.HC,cs.IR,stat.ML
 ```
 
-- [ ] **Step 5: app/config.py**
+- [x] **Step 5: app/config.py**
 
 ```python
 from pathlib import Path
@@ -309,7 +309,7 @@ DATA_DIR = PROJECT_ROOT / "data"
 DATA_DIR.mkdir(exist_ok=True)
 ```
 
-- [ ] **Step 6: app/main.py (minimal)**
+- [x] **Step 6: app/main.py (minimal)**
 
 ```python
 from fastapi import FastAPI
@@ -334,7 +334,7 @@ def create_app() -> FastAPI:
 app = create_app()
 ```
 
-- [ ] **Step 7: tests/conftest.py (minimal)**
+- [x] **Step 7: tests/conftest.py (minimal)**
 
 ```python
 import pytest
@@ -348,7 +348,7 @@ async def client():
         yield c
 ```
 
-- [ ] **Step 8: tests/test_smoke.py**
+- [x] **Step 8: tests/test_smoke.py**
 
 ```python
 async def test_health_endpoint_returns_ok(client):
@@ -357,7 +357,7 @@ async def test_health_endpoint_returns_ok(client):
     assert response.json()["status"] == "ok"
 ```
 
-- [ ] **Step 9: Run uv sync and verify**
+- [x] **Step 9: Run uv sync and verify**
 
 ```bash
 uv sync
@@ -366,7 +366,7 @@ uv run pytest tests/test_smoke.py -v
 
 Expected: all tests pass; `app/` and `tests/` directories created.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add pyproject.toml ruff.toml pytest.ini .env.example app/ tests/ uv.lock
