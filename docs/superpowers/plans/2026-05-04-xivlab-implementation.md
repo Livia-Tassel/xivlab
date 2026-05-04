@@ -1313,7 +1313,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 - Test: `tests/unit/test_email_mock.py`
 - Test: `tests/integration/test_email_verification.py`
 
-- [ ] **Step 1: app/services/email.py with mock + Resend backends**
+- [x] **Step 1: app/services/email.py with mock + Resend backends**
 
 ```python
 from dataclasses import dataclass, field
@@ -1367,7 +1367,7 @@ async def send_email(to: str, subject: str, html: str, text: str) -> None:
     await backend.send(to, subject, html, text)
 ```
 
-- [ ] **Step 2: Test email mock**
+- [x] **Step 2: Test email mock**
 
 `tests/unit/test_email_mock.py`:
 
@@ -1384,7 +1384,7 @@ async def test_mock_records_sent_email():
 
 Run → PASS (mock is the default backend in tests since `EMAIL_BACKEND=mock`).
 
-- [ ] **Step 3: Test verification flow (RED)**
+- [x] **Step 3: Test verification flow (RED)**
 
 `tests/integration/test_email_verification.py`:
 
@@ -1425,7 +1425,7 @@ async def test_verify_email_invalid_token_404(client):
 
 Run → FAIL.
 
-- [ ] **Step 4: Augment register to issue token + send email**
+- [x] **Step 4: Augment register to issue token + send email**
 
 Modify `app/routers/auth.py` register handler:
 
@@ -1471,7 +1471,7 @@ async def register(payload: RegisterRequest) -> UserPublic:
     return UserPublic.model_validate(user, from_attributes=True)
 ```
 
-- [ ] **Step 5: Add verify-email endpoint**
+- [x] **Step 5: Add verify-email endpoint**
 
 Append to `app/routers/auth.py`:
 
@@ -1492,7 +1492,7 @@ async def verify_email(token: str):
     return {"ok": True}
 ```
 
-- [ ] **Step 6: Run tests**
+- [x] **Step 6: Run tests**
 
 ```bash
 uv run pytest tests/integration/test_email_verification.py tests/unit/test_email_mock.py -v
@@ -1500,7 +1500,7 @@ uv run pytest tests/integration/test_email_verification.py tests/unit/test_email
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add app/services/email.py app/routers/auth.py tests/

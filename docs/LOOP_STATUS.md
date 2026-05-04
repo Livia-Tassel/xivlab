@@ -1,30 +1,37 @@
 # xivLab Loop Status
 
-**Last updated**: 2026-05-04T20:15:00+08:00
-**Last completed Task**: T04 (Auth — Login + Sessions + current_user)
-**Next Task**: T05 (Auth — Email Service + Verification)
-**Test suite**: green (19 passed)
+**Last updated**: 2026-05-04T20:35:00+08:00
+**Last completed Task**: T05 (Auth — Email Service + Verification)
+**Next Task**: T06 (Auth — Password Reset)
+**Test suite**: green (26 passed)
 **Last commit**: pending — see git log after this iteration
 
 ## Notes for next iteration
 
-- Authentication is now fully wired except email verification: `register` (T03) → `login` issues a `session` cookie and persists a row in `sessions` → `/api/v1/me` resolves the user via the cookie → `logout` deletes the row and clears the cookie.
-- `app/deps.py` exposes `current_user`, `require_admin`, `require_email_verified` for downstream routers (T08+ Tasks need `current_user`; admin queue needs `require_admin`).
-- Sessions roll: every authenticated request calls `slide_session(...)` which moves `expires_at` and `last_seen_at` forward by `SESSION_LIFETIME` (30 days). When a session DOES expire, `get_session(...)` returns `None` and the cookie holder gets a 401.
-- Cookie attributes for login: `httponly=True`, `samesite=lax`, `secure=False`, `max_age=30 days`. **`secure=False` is a TODO** — flip to `True` when `app_env == "prod"` once deploy lands (T22 wires the env-based check, T27 sets the actual prod env). I added a TODO comment in the code.
-- httpx `AsyncClient` persists cookies across requests in the same test by default — that's why `register → login → /me` chains in the test work without manual cookie passing.
-- Plan said to register the conftest fixture earlier, but the fixture from T03 already covers what T04 needs (autouse `_reset_db`). No conftest changes this iteration.
+- `app/services/email.py` exposes `send_email(to, subject, html, text)` with two backends:
+  - `MockEmailBackend` (default in tests/dev) — records each call on the class-level `sent: list[SentEmail]`. Tests inspect this list.
+  - `ResendBackend` — uses `resend.Emails.send_async` (the SDK's native async surface, not `asyncio.to_thread` over the sync API as the plan suggested). Imports `resend` lazily inside the method so test envs without an API key don't have to install it.
+- Registration flow now: insert user → flush → insert `EmailVerificationToken` (48h expiry) → commit → refresh user → build `UserPublic` → release session → send email → return UserPublic.
+- The verify URL in the email is `{settings.app_base_url}/verify-email/{token}` — that's a frontend route. The email's link points users to a future T07 page that POSTs to `/api/v1/auth/verify-email/{token}`.
+- `POST /api/v1/auth/verify-email/{token}` returns 200 + `{"ok": True}` on success, 404 on missing/expired/used token. Tokens are one-shot (`used_at` is stamped on consumption).
+- The autouse `_reset_db` conftest fixture now also calls `MockEmailBackend.reset()` so emails don't bleed between tests.
 
-## Open issues / TODOs surfaced this iteration
+## Plan deviations (deliberate, documented)
 
-- Cookie `secure` flag is hardcoded `False`. **Action item for T22 / T27:** read `settings.app_env` and set `secure=settings.app_env == "prod"` so localhost dev still works while prod requires HTTPS.
-- `datetime.utcnow()` deprecation warnings now show 16 occurrences (mostly from session create/get/slide). When the auth surface stabilizes, replace with `datetime.now(UTC)` in a single sweep. **Defer for now**, doesn't block any tests.
-- `DEVELOPMENT_GUIDE.md` §11 still says "Password hashing: bcrypt via passlib" — the code uses direct bcrypt (T03 deviation). One-line wording fix.
+- Switched `ResendBackend` to use the SDK's native `Emails.send_async` instead of the plan's `asyncio.to_thread(Emails.send, ...)`. The native async path is cleaner and the plan's pattern would still work; this is purely a quality bump.
+- Typed the Resend params dict as `resend.Emails.SendParams` (which the SDK exposes) so pyright's strict TypedDict check passes without `# type: ignore`.
 
-## What's next (T05 high-level reminder)
+## Open issues / TODOs
 
-- `app/services/email.py` — Resend wrapper + a mock backend (selected via `EMAIL_BACKEND=mock|resend` setting). The mock backend should expose a `sent` list for test inspection.
-- `app/services/email_render.py` (or just inline) — Jinja2 templates `templates/emails/verify.html` and `verify.txt`.
-- `register` should now ALSO create an `email_verification_tokens` row and dispatch a verification email.
-- New endpoint `GET /api/v1/auth/verify-email?token=...` consumes a token (sets `email_verified=True`, marks token `used_at`).
-- Tests: register triggers email send, GET verify with valid token → 200 + user.email_verified=True, expired/used token → 410 or 400.
+- Cookie `secure=False` still hardcoded in login. **T22 / T27 owner**: read `settings.app_env` and flip to `secure=settings.app_env == "prod"`.
+- `datetime.utcnow()` deprecation warnings now at 39 (every register/login/verify path triggers ORM defaults). Defer the sweep — purely cosmetic.
+- `DEVELOPMENT_GUIDE.md` §11 still says "passlib" — pending one-line edit.
+
+## What's next (T06 high-level reminder)
+
+- `app/schemas/auth.py` — add `ForgotPasswordRequest`, `ResetPasswordRequest`.
+- New endpoints under `/api/v1/auth/`:
+  - `POST /forgot-password` — always returns 200 (anti-enumeration). Internally: if email exists, create `PasswordResetToken` (48h), email a reset link.
+  - `POST /reset-password` — body `{ token, new_password }`. Validates token, hashes new password, marks token used.
+- Tests: forgot-password is idempotent on missing email; reset-password rejects invalid/expired tokens; old password no longer works after reset.
+- Email rendering can stay inline (no Jinja2 templates yet — that's T07's job).

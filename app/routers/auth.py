@@ -1,18 +1,21 @@
+from datetime import datetime, timedelta
+
 from fastapi import APIRouter, Cookie, HTTPException, Request, Response, status
 from sqlalchemy import select
 
+from app.config import get_settings
 from app.db import session_scope
 from app.deps import COOKIE_NAME
-from app.models import User
+from app.models import EmailVerificationToken, User
 from app.schemas.auth import LoginRequest, RegisterRequest, UserPublic
+from app.services.email import send_email
 from app.services.password import hash_password, verify_password
-from app.services.session import (
-    SESSION_LIFETIME,
-    create_session,
-    delete_session,
-)
+from app.services.session import SESSION_LIFETIME, create_session, delete_session
+from app.services.tokens import random_token
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+
+VERIFY_TOKEN_LIFETIME = timedelta(hours=48)
 
 
 @router.post("/register", response_model=UserPublic, status_code=status.HTTP_201_CREATED)
@@ -27,9 +30,49 @@ async def register(payload: RegisterRequest) -> UserPublic:
             display_name=payload.display_name,
         )
         s.add(user)
+        await s.flush()  # populate user.id for the token FK
+
+        token_value = random_token(32)
+        s.add(
+            EmailVerificationToken(
+                token=token_value,
+                user_id=user.id,
+                expires_at=datetime.utcnow() + VERIFY_TOKEN_LIFETIME,
+            )
+        )
         await s.commit()
         await s.refresh(user)
-        return UserPublic.model_validate(user)
+        public = UserPublic.model_validate(user)
+
+    settings = get_settings()
+    verify_url = f"{settings.app_base_url}/verify-email/{token_value}"
+    await send_email(
+        to=public.email,
+        subject="[xivLab] Verify your email",
+        html=(
+            "<p>Welcome to xivLab! Confirm your email by clicking: "
+            f'<a href="{verify_url}">{verify_url}</a></p>'
+        ),
+        text=f"Welcome to xivLab! Confirm your email: {verify_url}",
+    )
+    return public
+
+
+@router.post("/verify-email/{token}")
+async def verify_email(token: str) -> dict[str, bool]:
+    async with session_scope() as s:
+        evt = (
+            await s.execute(
+                select(EmailVerificationToken).where(EmailVerificationToken.token == token)
+            )
+        ).scalar_one_or_none()
+        if evt is None or evt.used_at is not None or evt.expires_at < datetime.utcnow():
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Invalid or expired token")
+        user = (await s.execute(select(User).where(User.id == evt.user_id))).scalar_one()
+        user.email_verified = True
+        evt.used_at = datetime.utcnow()
+        await s.commit()
+    return {"ok": True}
 
 
 @router.post("/login")

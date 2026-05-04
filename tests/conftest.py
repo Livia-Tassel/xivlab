@@ -1,9 +1,9 @@
 """Pytest fixtures shared across all tests.
 
 The autouse ``_reset_db`` fixture wipes and recreates the schema before each
-test (including the sqlite-vec virtual table) and re-seeds the 9 prompt
-categories. This gives each test a clean DB without paying the cost of a
-full alembic upgrade per test.
+test (including the sqlite-vec virtual table), re-seeds the 9 prompt
+categories, and clears the in-memory mock email backend. This gives each
+test a clean DB without paying the cost of a full alembic upgrade per test.
 """
 
 from collections.abc import AsyncIterator
@@ -16,6 +16,7 @@ from sqlalchemy import text
 from app.db import Base, engine, session_scope
 from app.main import app
 from app.models import PromptCategory
+from app.services.email import MockEmailBackend
 
 # Mirror of alembic/versions/0002_seed_categories.py
 _SEED_CATEGORIES: list[tuple[str, str, str, str, int]] = [
@@ -59,6 +60,9 @@ async def _reset_db() -> AsyncIterator[None]:
                 )
             )
         await s.commit()
+
+    # Clear any emails recorded by prior tests.
+    MockEmailBackend.reset()
 
     yield
 
