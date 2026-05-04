@@ -2257,11 +2257,11 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 - Create: `tests/fixtures/arxiv_response.xml`
 - Test: `tests/unit/test_arxiv_fetcher.py`
 
-- [ ] **Step 1: Capture sample arXiv API response**
+- [x] **Step 1: Capture sample arXiv API response**
 
 Save a real arXiv API response to `tests/fixtures/arxiv_response.xml`. Use this as the canonical fixture. Example URL: `http://export.arxiv.org/api/query?search_query=cat:cs.AI&start=0&max_results=5&sortBy=submittedDate&sortOrder=descending`.
 
-- [ ] **Step 2: Test (RED)**
+- [x] **Step 2: Test (RED)**
 
 `tests/unit/test_arxiv_fetcher.py`:
 
@@ -2283,7 +2283,7 @@ def test_parse_fixture_returns_papers():
     assert p.primary_category
 ```
 
-- [ ] **Step 3: Implementation**
+- [x] **Step 3: Implementation**
 
 ```python
 import asyncio
@@ -2359,7 +2359,7 @@ async def fetch_recent(categories: list[str], max_results: int = 200) -> list[Ar
     return []
 ```
 
-- [ ] **Step 4: Run tests + commit**
+- [x] **Step 4: Run tests + commit**
 
 ```bash
 uv run pytest tests/unit/test_arxiv_fetcher.py -v

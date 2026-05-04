@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/">
+  <link href="http://arxiv.org/api/query?search_query=cat:cs.AI&amp;start=0&amp;max_results=3" rel="self" type="application/atom+xml"/>
+  <title type="html">arXiv Query: search_query=cat:cs.AI&amp;start=0&amp;max_results=3</title>
+  <id>http://arxiv.org/api/abc123</id>
+  <updated>2026-05-04T00:00:00-04:00</updated>
+  <opensearch:totalResults xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/">12345</opensearch:totalResults>
+  <opensearch:startIndex xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/">0</opensearch:startIndex>
+  <opensearch:itemsPerPage xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/">3</opensearch:itemsPerPage>
+  <entry>
+    <id>http://arxiv.org/abs/2604.12345v1</id>
+    <updated>2026-05-04T18:00:00Z</updated>
+    <published>2026-05-04T08:30:00Z</published>
+    <title>Self-Reflective Multi-Agent LLM Systems
+  for Long-Horizon Tasks</title>
+    <summary>  We propose SRM-Agent, a self-reflective multi-agent framework that
+combines tool use, memory consolidation, and chain-of-verification to
+solve long-horizon planning problems.  Across nine benchmarks we show a
+14% absolute improvement over single-agent baselines.
+</summary>
+    <author>
+      <name>Alice Chen</name>
+    </author>
+    <author>
+      <name>Bob Müller</name>
+    </author>
+    <author>
+      <name>张三</name>
+    </author>
+    <link href="http://arxiv.org/abs/2604.12345v1" rel="alternate" type="text/html"/>
+    <link title="pdf" href="http://arxiv.org/pdf/2604.12345v1" rel="related" type="application/pdf"/>
+    <arxiv:primary_category xmlns:arxiv="http://arxiv.org/schemas/atom" term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2604.67890v2</id>
+    <updated>2026-05-04T17:00:00Z</updated>
+    <published>2026-05-03T12:00:00Z</published>
+    <title>Sparse Mixture-of-Experts for Vision Transformers</title>
+    <summary>  Vision Transformers struggle to scale efficiently. We introduce
+Sparse-ViT-MoE which routes patches to expert sub-networks based on
+content, achieving 2.3× throughput at matched accuracy.
+</summary>
+    <author>
+      <name>Carol Singh</name>
+    </author>
+    <link href="http://arxiv.org/abs/2604.67890v2" rel="alternate" type="text/html"/>
+    <link title="pdf" href="http://arxiv.org/pdf/2604.67890v2" rel="related" type="application/pdf"/>
+    <arxiv:primary_category xmlns:arxiv="http://arxiv.org/schemas/atom" term="cs.CV" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.CV" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2604.99999v1</id>
+    <updated>2026-05-03T20:00:00Z</updated>
+    <published>2026-05-03T20:00:00Z</published>
+    <title>Provable Guarantees for Continual Pre-training of Tiny LMs</title>
+    <summary>We give the first PAC-style guarantees for continual pre-training of
+small language models on streaming data, under realistic assumptions.</summary>
+    <author>
+      <name>Dan O'Reilly</name>
+    </author>
+    <author>
+      <name>Eva Park</name>
+    </author>
+    <link href="http://arxiv.org/abs/2604.99999v1" rel="alternate" type="text/html"/>
+    <link title="pdf" href="http://arxiv.org/pdf/2604.99999v1" rel="related" type="application/pdf"/>
+    <arxiv:primary_category xmlns:arxiv="http://arxiv.org/schemas/atom" term="stat.ML" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="stat.ML" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+  </entry>
+</feed>
