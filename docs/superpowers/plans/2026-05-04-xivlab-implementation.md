@@ -1076,7 +1076,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 - Modify: `app/routers/auth.py` (login, logout)
 - Test: `tests/integration/test_auth_login.py`
 
-- [ ] **Step 1: Test login + cookie set (RED)**
+- [x] **Step 1: Test login + cookie set (RED)**
 
 `tests/integration/test_auth_login.py`:
 
@@ -1126,7 +1126,7 @@ async def test_logout_clears_cookie(client):
 
 Run → FAIL.
 
-- [ ] **Step 2: app/services/session.py**
+- [x] **Step 2: app/services/session.py**
 
 ```python
 from datetime import datetime, timedelta
@@ -1175,7 +1175,7 @@ async def slide_session(s: AsyncSession, sess: DbSession) -> None:
     await s.commit()
 ```
 
-- [ ] **Step 3: app/deps.py**
+- [x] **Step 3: app/deps.py**
 
 ```python
 from typing import Annotated
@@ -1212,7 +1212,7 @@ async def require_email_verified(user: Annotated[User, Depends(current_user)]) -
     return user
 ```
 
-- [ ] **Step 4: Add LoginRequest to schemas/auth.py**
+- [x] **Step 4: Add LoginRequest to schemas/auth.py**
 
 ```python
 class LoginRequest(BaseModel):
@@ -1220,7 +1220,7 @@ class LoginRequest(BaseModel):
     password: str
 ```
 
-- [ ] **Step 5: Add login + logout + /me to routers**
+- [x] **Step 5: Add login + logout + /me to routers**
 
 Append to `app/routers/auth.py`:
 
@@ -1261,7 +1261,7 @@ async def logout(response: Response, session: str | None = Cookie(default=None, 
 
 Add `Cookie` and `Request` imports at top.
 
-- [ ] **Step 6: Create /api/v1/me router**
+- [x] **Step 6: Create /api/v1/me router**
 
 Create `app/routers/me.py`:
 
@@ -1286,7 +1286,7 @@ from app.routers import me as me_router
 app.include_router(me_router.router)
 ```
 
-- [ ] **Step 7: Run tests**
+- [x] **Step 7: Run tests**
 
 ```bash
 uv run pytest tests/integration/test_auth_login.py -v
@@ -1294,7 +1294,7 @@ uv run pytest tests/integration/test_auth_login.py -v
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add app/services/session.py app/deps.py app/schemas/auth.py app/routers/ tests/

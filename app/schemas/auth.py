@@ -7,6 +7,11 @@ class RegisterRequest(BaseModel):
     display_name: str | None = Field(default=None, max_length=100)
 
 
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
 class UserPublic(BaseModel):
     """Public user representation — never includes the password hash."""
 
