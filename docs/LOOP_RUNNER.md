@@ -198,18 +198,22 @@ You're an iteration; you're not the marathon. If you've been working for >20 min
 - Fix typos / small bugs in earlier Tasks if you find them while working on a current Task. Note in commit body.
 - Improve test coverage of an area you're already touching.
 - Add helper utilities (e.g. test factories) when you find yourself duplicating patterns.
+- **Push to `origin main` at the end of every iteration** so progress is durable. The remote is `git@github.com:Livia-Tassel/xivlab.git` (already configured).
+- Choose your own development environment: write code locally then push, or SSH to Sacurajima and write directly there. Both work — pick what's faster.
+- Decide deployment cadence: deploy after every Task, after each phase, or only at the end (T28). Just keep it tested.
 
 ## 8. Things You Are NOT Allowed To Do
 
-- ❌ Skip Tasks or reorder them
+- ❌ Skip Tasks or reorder them — the plan has dependencies
 - ❌ Commit broken tests
 - ❌ Commit `# TODO` stubs that pretend to be done
 - ❌ Modify `docs/superpowers/specs/` (the spec is source of truth; if you spot a real issue, document in LOOP_STATUS)
 - ❌ Run real external API calls in tests (always mocked)
-- ❌ Push to remote (only `git commit`, never `git push`, unless explicitly told otherwise)
-- ❌ Delete data, drop tables, or run destructive `git` commands
+- ❌ Force-push or rewrite history on `main`
+- ❌ Delete data, drop tables, or run destructive `git` commands without strong reason + clear undo path
 - ❌ Bump major dependency versions (Python, FastAPI, SQLAlchemy) without an explicit Task for it
 - ❌ Change the deployment target (Sacurajima) or the memory budget (<500MB)
+- ❌ Commit `.env` or any file containing real secrets
 
 ---
 
