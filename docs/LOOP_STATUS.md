@@ -1,38 +1,44 @@
 # xivLab Loop Status
 
-**Last updated**: 2026-05-05T18:45:00+08:00
-**Last completed Task**: T15 (send_digests Cron Job)
-**Next Task**: T16 (RSS Feed Renderer + Endpoint)
-**Test suite**: green (127 passed)
+**Last updated**: 2026-05-05T19:10:00+08:00
+**Last completed Task**: T16 (RSS/Atom Feed Endpoint)
+**Next Task**: T17 (Prompts CRUD API + Spam Guards)
+**Test suite**: green (139 passed)
 **Last commit**: pending — see git log after this iteration
 
 ## What's now usable
 
-- `app/jobs/send_digests.py` exposes `run_send_digests()`. The cron iterates all users with `email_verified=True`, computes "now" in each user's tz (`user.tz` via `zoneinfo.ZoneInfo`, falling back to UTC if the string is invalid), and matches their tasks where `enabled=True AND delivery_time == local HH:MM AND "email" in delivery_channels`. For each match it runs T13's `select_papers_for_task` then T14's `deliver_email` (which itself writes the `Delivery` rows). The whole run is wrapped in `cron_run("send_digests")` and reports `digests_sent` (count of non-empty digests delivered) into `cron_runs.job_metadata`.
-- The MVP daily digest pipeline is now end-to-end functional minus APScheduler wiring (T22): T11 (embed) → T12 (fetch+vectors) → T13 (filter) → T14 (render+deliver) → T15 (schedule).
-- 9 integration tests in `tests/integration/test_send_digests_job.py`: happy path (Asia/Shanghai user, UTC=00:00 → local=08:00 fires), `cron_runs.digests_sent == 1`, skips unverified user, skips disabled task, skips on time mismatch, skips when `delivery_channels=["rss"]`, skips when no candidate papers (no email AND no Delivery rows), invalid-tz fallback to UTC, two-tz simultaneous fire (Asia/Shanghai user with delivery_time=08:00 + UTC user with delivery_time=00:00 both fire at UTC=00:00).
+- `app/services/feed_renderer.py` exposes `render_atom(task, papers, *, base_url, user_id) -> str`. Pure function: emits valid Atom 1.0 XML with one `<entry>` per paper (id = `https://arxiv.org/abs/<arxiv_id>`, title/abstract entity-escaped via `xml.sax.saxutils.escape`, author = first 3 names joined, link to abs page, summary = abstract truncated to 1000 chars, category = primary_category). Feed-level `<id>`, `<title>`, `<updated>`, and `<link rel="self">` are all populated; the self link includes the token in the query string so feed readers re-poll the right URL.
+- `app/routers/rss.py` exposes `GET /rss/{user_id}/{task_id}/feed.xml?token=<rss_token>`. Token mismatch, missing task, or `(user_id, task_id)` belonging to a different owner all return 404 (uniform — never disclose task existence). On success, returns `application/atom+xml` with the rendered feed.
+- Feed query: papers joined to `Delivery` rows for that task within the last 30 days, ordered by `Paper.published_at DESC`, capped at 50. Channel is irrelevant (any delivery counts) so RSS subscribers see whatever was sent to email too.
+- `app/main.py` registered `rss_router` between `tasks_router` and `pages_router` so the URL prefix is unambiguous (no overlap with `/dashboard`).
+- 12 integration tests in `tests/integration/test_rss.py`: 4 token/auth (missing, wrong, mis-routed `user_id`, missing task), 8 happy/structure (200 + correct content-type, one entry per delivery, ordered by published_at DESC, 30-day window cuts stale, task name + self link with token, `& < >` autoescape via `escape` so `ET.fromstring` parses, empty feed valid, 50-entry cap).
 
 ## Plan deviations / fixes
 
-- The plan caught the bad-tz case with bare `except Exception` then assigned `tz = ZoneInfo("UTC")`. Tightened to `except ZoneInfoNotFoundError` (the only thing that *should* go wrong here) and pulled `_UTC = ZoneInfo("UTC")` to module scope so we don't construct it on every loop iteration.
-- The plan inlined the local-time conversion in the loop body. Pulled it into `_user_local_hh_mm(now_utc, user_tz) -> str` to make the per-test "what HH:MM does this user see" check verifiable in isolation. (No new direct test of the helper, but the two-tz test exercises both branches.)
-- Added 6 tests beyond the plan's hand-wave (it had a single TODO test): unverified user, disabled task, time mismatch, RSS-only, no-papers, invalid tz, two-tz simultaneous. These cover all 4 filter conditions in the user→task→channel pipeline plus the timezone fallback.
-- Test fixtures use a `_FrozenDateTime` subclass + `patch("app.jobs.send_digests.datetime", ...)` to control `utcnow()` deterministically. Cleaner than `freezegun` for a single function, no new dep.
-- The plan's `await s.execute(select(...)).scalars().all()` pattern was replaced with `await s.scalars(select(...)).all()` — same result, one less hop, matches the style we settled on in T12+T13.
+- The plan's `render_atom` had `_iso_z` baked into the entry block via a string concat: `f"{p.published_at.isoformat() if p.published_at else updated}Z"`. Bug: when `published_at` was `None`, it appended a stray `Z` to a value that already ended in `Z` (`updated` is built that way). Extracted `_iso_z(dt, fallback) -> str` so the trailing-`Z` rule lives in one place.
+- Plan's renderer signature was positional: `render_atom(task, papers, base_url, user_id)`. Made `base_url` and `user_id` keyword-only — too easy to swap them at the call site otherwise.
+- Plan's router used `s.execute(select(...)).scalar_one_or_none()`. Switched to `s.scalars(...).one_or_none()` to match the style we settled on in T12+T13+T15. Same semantics.
+- Plan's `<category term="{p.primary_category}"/>` didn't escape — `primary_category` is `str | None` and unescaped ampersands would break the XML. Wrapped in `escape(p.primary_category or "")`.
+- Plan typed `token: str` as a required path-style param (would 422 on missing). Used `token: str = Query(default="")` so missing/empty token funnels through the same 404 branch as wrong-token (no info leak via different status codes).
+- Added 9 tests beyond the plan's 2 sketches: every Atom-feed branch (mis-routed user_id, 30-day cutoff, ordering, 50-cap, escape, empty-state, self-link content) has a dedicated test. Catches regressions when someone edits the renderer.
 
 ## Open issues / TODOs
 
-- Per-task failures still take down the whole cron run. T15's spec says "if one task explodes, the run fails and is re-runnable" — that's what we have. T22 (APScheduler wiring) or a future hardening pass should add per-task try/except so one bad task doesn't block others.
 - `socksio==1.0.0` transitive dep — fine.
 - Cookie `secure=False` still hardcoded — T22 / T27.
-- `datetime.utcnow()`: 520 warnings (up from 443; cron_log + send_digests are hot paths). Sweep around T15. **Still pending — not done in T15 either; cron_log and the new job both still use utcnow().** Calling this out as the explicit next-cycle cleanup.
+- `datetime.utcnow()`: 775 warnings (up from 520; renderer + router + 12 new tests all touch it). The `T15` callout for a sweep is overdue. **Plan to lift it into T15-or-T16's leftover work after T17 lands**, or do a one-shot global s/utcnow()/now(UTC)/ pass when the count clears 1000.
 - `DEVELOPMENT_GUIDE.md` §11 wording (passlib → bcrypt) still pending.
-- Real arXiv API + real OpenAI embeddings still never hit by tests; the send-digest cron mocks `datetime.utcnow` and reads from already-seeded `papers`. First live exercise is the manual smoke test before deploy (T26).
-- `delivery_time` is matched as a literal string at the minute resolution. If APScheduler fires at 08:00:30 and `datetime.utcnow().replace(second=0)` lands on 08:00, we match — but if drift pushes us to 08:01, we miss the day's digest entirely. T22 should fire on the 0th second to be safe; if not, we'd need a "missed-window catch-up" pass.
+- Real arXiv API + real OpenAI embeddings still never hit by tests; RSS feed just reads the `Delivery` table populated by T14/T15 — no external dep added.
+- Atom feed serves any delivered paper for a task regardless of channel. If an RSS-only subscriber wants email-style filtering (e.g., only "high score" papers), we'd need a `Delivery.channel='rss'` write-path or a feed-side filter. Out of scope for MVP.
+- The `<feed>` lacks an `<author>` block (only per-entry authors). Acceptable per RFC 4287 since each entry has its own; some readers complain. Add later if users hit it.
+- `render_atom` constructs the feed via f-string concatenation, not an XML builder. Cheap, fast, and `escape()` covers the only injection vector — but if we add fields with attribute values, double-check escaping (Atom forbids unescaped `<` `>` `&` `"` `'` in attrs).
 
-## What's next (T16 high-level reminder)
+## What's next (T17 high-level reminder)
 
-T16 is the RSS feed renderer + endpoint:
-- `app/services/feed_renderer.py` — pure function rendering a list of `Paper` rows into RSS 2.0 XML. One `<item>` per paper with title, link to arxiv abs page, description (abstract truncated), pubDate.
-- `app/routers/rss.py` — `GET /rss/{rss_token}` endpoint. Looks up the task by `rss_token`, calls `select_papers_for_task` (or a relaxed variant — RSS shouldn't dedupe via `Delivery` filter since it's pull-based, so likely a new `select_papers_for_rss` or a flag), renders, returns `application/rss+xml`. The T13 pipeline already excludes RSS deliveries from the email-dedup filter, so we just need to NOT write `Delivery(channel='rss')` rows from the endpoint (or write them and accept that the feed self-rotates as new papers arrive).
-- Tests: 401-ish on bad token, 200 with valid XML on good token, papers actually appear in `<item>` tags.
+T17 is the Prompts CRUD API + spam guards (PromptHub side of the product, not arXiv digest):
+- `app/routers/prompts.py` — POST/GET/PATCH/DELETE on `/api/v1/prompts`. Anonymous-ish: requires login but no email verification, since contributing a prompt is low-trust.
+- Spam guards: rate limit per user (e.g., 5/day), basic content checks (length cap, banned-words list, URL count cap), maybe a `pending_review=true` default so admins (T21) can approve before public listing.
+- `app/services/prompt_validation.py` — pure-function content checks; tests cover each rule.
+- Tests: 401 unauth, 429 over-quota, 201 happy path, 422 on too-long content, prompt vote/copy events tracked.
+- T17 is the first endpoint touching `Prompt` / `PromptCategory` / `PromptVote` / `PromptCopyEvent` — exercises ORM models created in T02 that have so far only been schema, not API.

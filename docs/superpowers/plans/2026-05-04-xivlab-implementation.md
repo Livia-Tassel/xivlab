@@ -2917,7 +2917,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 - Create: `app/routers/rss.py`
 - Test: `tests/integration/test_rss.py`
 
-- [ ] **Step 1: Test (RED)**
+- [x] **Step 1: Test (RED)**
 
 ```python
 async def test_rss_feed_requires_token(client):
@@ -2929,7 +2929,7 @@ async def test_rss_feed_returns_atom(client):
     ...
 ```
 
-- [ ] **Step 2: Implementation**
+- [x] **Step 2: Implementation**
 
 ```python
 # app/services/feed_renderer.py
@@ -2997,7 +2997,7 @@ async def task_feed(user_id: int, task_id: int, token: str):
     return Response(content=xml, media_type="application/atom+xml")
 ```
 
-- [ ] **Step 3: Run tests + commit**
+- [x] **Step 3: Run tests + commit**
 
 ```bash
 uv run pytest tests/integration/test_rss.py -v
