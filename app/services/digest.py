@@ -24,13 +24,21 @@ and invalidated when ``source_text != task.interest_description``.
 """
 
 from collections.abc import Sequence
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Delivery, Paper, Task, TaskEmbedding
+from app.config import PROJECT_ROOT, get_settings
+from app.models import Delivery, Paper, Task, TaskEmbedding, User
+from app.services.email import send_email
 from app.services.embedding import embed_text, from_blob, to_blob
+
+_email_env = Environment(
+    loader=FileSystemLoader(str(PROJECT_ROOT / "templates" / "emails")),
+    autoescape=select_autoescape(["html"]),
+)
 
 
 async def candidates_for_task(
@@ -135,3 +143,59 @@ async def select_papers_for_task(s: AsyncSession, task: Task) -> list[Paper]:
     cands = [p for p in cands if p.id not in delivered_ids]
 
     return cands[: task.max_papers_per_day]
+
+
+def render_digest(
+    task: Task,
+    papers: list[Paper],
+    unsubscribe_url: str,
+) -> tuple[str, str]:
+    """Render the digest email as (html, text).
+
+    Jinja autoescape is on for ``.html`` so arXiv titles/abstracts can't
+    inject markup. The plain-text template isn't autoescaped — raw text
+    output is the point.
+    """
+    ctx = {
+        "task": task,
+        "papers": papers,
+        "today": date.today().isoformat(),
+        "unsubscribe_url": unsubscribe_url,
+    }
+    html = _email_env.get_template("digest.html").render(**ctx)
+    txt = _email_env.get_template("digest.txt").render(**ctx)
+    return html, txt
+
+
+async def deliver_email(
+    s: AsyncSession,
+    user: User,
+    task: Task,
+    papers: list[Paper],
+) -> None:
+    """Send the digest email and record one Delivery row per paper.
+
+    No-op when ``papers`` is empty — an empty digest is not worth sending.
+    The unique ``(task_id, paper_id, channel='email')`` constraint protects
+    against accidental re-sends even if T13's dedup filter misfires.
+    """
+    if not papers:
+        return
+
+    settings = get_settings()
+    unsubscribe_url = f"{settings.app_base_url}/dashboard/tasks/{task.id}"
+    html, txt = render_digest(task, papers, unsubscribe_url)
+
+    subject = f"🧪 {task.name} · {len(papers)} papers · {date.today().isoformat()}"
+    await send_email(to=user.email, subject=subject, html=html, text=txt)
+
+    for p in papers:
+        s.add(
+            Delivery(
+                user_id=user.id,
+                task_id=task.id,
+                paper_id=p.id,
+                channel="email",
+            )
+        )
+    await s.commit()

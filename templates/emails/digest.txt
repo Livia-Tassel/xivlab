@@ -1,0 +1,15 @@
+{{ task.name }} · arXiv 早报 · {{ today }}
+{{ papers|length }} new papers matched.
+
+{% for p in papers %}
+[{{ loop.index }}] {{ p.title }}
+    {{ p.authors[:3]|join(', ') }}{% if p.authors|length > 3 %} et al.{% endif %} · {{ p.primary_category }}
+
+    {{ p.abstract[:600] }}{% if p.abstract|length > 600 %}…{% endif %}
+
+    abs: https://arxiv.org/abs/{{ p.id }}
+    pdf: {{ p.pdf_url or 'https://arxiv.org/pdf/' + p.id }}
+
+{% endfor %}
+--
+xivLab · manage subscription: {{ unsubscribe_url }}

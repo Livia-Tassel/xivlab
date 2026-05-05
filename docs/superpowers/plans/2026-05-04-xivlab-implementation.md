@@ -2748,7 +2748,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 - Modify: `app/services/digest.py` (render + send)
 - Test: `tests/unit/test_digest_rendering.py`
 
-- [ ] **Step 1: Email templates**
+- [x] **Step 1: Email templates**
 
 `templates/emails/digest.html`:
 ```html
@@ -2770,7 +2770,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 `templates/emails/digest.txt`: plain-text version.
 
-- [ ] **Step 2: Append to app/services/digest.py**
+- [x] **Step 2: Append to app/services/digest.py**
 
 ```python
 from datetime import date
@@ -2805,7 +2805,7 @@ async def deliver_email(s: AsyncSession, user, task: Task, papers: list[Paper]) 
     await s.commit()
 ```
 
-- [ ] **Step 3: Test rendering doesn't crash**
+- [x] **Step 3: Test rendering doesn't crash**
 
 `tests/unit/test_digest_rendering.py`:
 
@@ -2824,7 +2824,7 @@ def test_render_digest_includes_titles():
     assert "My Title" in text
 ```
 
-- [ ] **Step 4: Run tests + commit**
+- [x] **Step 4: Run tests + commit**
 
 ```bash
 uv run pytest tests/unit/test_digest_rendering.py -v

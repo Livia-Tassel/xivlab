@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+<body style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;color:#222;max-width:640px;margin:0 auto;padding:16px;">
+<h2 style="margin:0 0 12px;">🧪 {{ task.name }} · arXiv 早报 · {{ today }}</h2>
+<p style="color:#666;font-size:13px;">{{ papers|length }} new papers matched.</p>
+{% for p in papers %}
+<article style="border-top:1px solid #eee;padding:12px 0;">
+  <h3 style="margin:0 0 4px;font-size:16px;">
+    <a href="https://arxiv.org/abs/{{ p.id }}" style="color:#1a56db;text-decoration:none;">{{ p.title }}</a>
+  </h3>
+  <p style="margin:0 0 4px;color:#888;font-size:12px;">
+    {{ p.authors[:3]|join(', ') }}{% if p.authors|length > 3 %} et al.{% endif %} · {{ p.primary_category }}
+  </p>
+  <p style="margin:0;font-size:14px;line-height:1.5;">
+    {{ p.abstract[:600] }}{% if p.abstract|length > 600 %}…{% endif %}
+  </p>
+  <p style="margin:6px 0 0;font-size:12px;">
+    <a href="{{ p.pdf_url or 'https://arxiv.org/pdf/' + p.id }}" style="color:#1a56db;">PDF →</a>
+  </p>
+</article>
+{% endfor %}
+<p style="color:#aaa;font-size:11px;margin-top:24px;">
+  xivLab · <a href="{{ unsubscribe_url }}" style="color:#aaa;">manage subscription</a>
+</p>
+</body>
+</html>
