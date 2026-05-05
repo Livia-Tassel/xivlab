@@ -2476,7 +2476,7 @@ def from_blob(blob: bytes) -> list[float]:
 - Create: `app/jobs/fetch_arxiv.py`
 - Test: `tests/integration/test_fetch_arxiv_job.py`
 
-- [ ] **Step 1: app/services/cron_log.py**
+- [x] **Step 1: app/services/cron_log.py**
 
 ```python
 from contextlib import asynccontextmanager
@@ -2514,7 +2514,7 @@ async def cron_run(job_name: str):
             await s.commit()
 ```
 
-- [ ] **Step 2: app/jobs/fetch_arxiv.py**
+- [x] **Step 2: app/jobs/fetch_arxiv.py**
 
 ```python
 from sqlalchemy import select
@@ -2571,7 +2571,7 @@ async def run_fetch_arxiv() -> None:
         meta["embedded"] = embedded
 ```
 
-- [ ] **Step 3: Test**
+- [x] **Step 3: Test**
 
 `tests/integration/test_fetch_arxiv_job.py`:
 
@@ -2606,7 +2606,7 @@ async def test_fetch_arxiv_persists_and_logs():
         assert runs[0].job_metadata.get("new_papers", 0) >= 2
 ```
 
-- [ ] **Step 4: Run tests + commit**
+- [x] **Step 4: Run tests + commit**
 
 ```bash
 uv run pytest tests/integration/test_fetch_arxiv_job.py -v
