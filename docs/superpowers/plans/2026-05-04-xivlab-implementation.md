@@ -2842,7 +2842,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 - Create: `app/jobs/send_digests.py`
 - Test: `tests/integration/test_send_digests_job.py`
 
-- [ ] **Step 1: Implementation**
+- [x] **Step 1: Implementation**
 
 ```python
 from datetime import datetime
@@ -2885,7 +2885,7 @@ async def run_send_digests() -> None:
         meta["digests_sent"] = digests_sent
 ```
 
-- [ ] **Step 2: Test (mocking time)**
+- [x] **Step 2: Test (mocking time)**
 
 `tests/integration/test_send_digests_job.py`:
 
@@ -2898,7 +2898,7 @@ from app.services.email import MockEmailBackend
 # run; assert MockEmailBackend.sent has the email
 ```
 
-- [ ] **Step 3: Run tests + commit**
+- [x] **Step 3: Run tests + commit**
 
 ```bash
 uv run pytest tests/integration/test_send_digests_job.py -v

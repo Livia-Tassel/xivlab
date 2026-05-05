@@ -1,40 +1,38 @@
 # xivLab Loop Status
 
-**Last updated**: 2026-05-05T18:20:00+08:00
-**Last completed Task**: T14 (Email Rendering + Send Digest)
-**Next Task**: T15 (send_digests Cron Job)
-**Test suite**: green (118 passed)
+**Last updated**: 2026-05-05T18:45:00+08:00
+**Last completed Task**: T15 (send_digests Cron Job)
+**Next Task**: T16 (RSS Feed Renderer + Endpoint)
+**Test suite**: green (127 passed)
 **Last commit**: pending — see git log after this iteration
 
 ## What's now usable
 
-- `templates/emails/digest.html` and `templates/emails/digest.txt` — Jinja templates for the daily digest email. HTML uses inline styles only (mailbox-friendly, no external CSS). Both render task name + today's ISO date in the header, paginate through papers showing title (linked to `arxiv.org/abs/<id>`), top-3 authors with " et al." truncation, primary_category, abstract truncated at 600 chars with `…`, and a PDF link (uses `paper.pdf_url` if set, else `arxiv.org/pdf/<id>` fallback). Footer has a manage-subscription link to `<app_base_url>/dashboard/tasks/<task_id>`.
-- `app/services/digest.render_digest(task, papers, unsubscribe_url) -> tuple[html, text]` — pure renderer with Jinja autoescape on for `.html` (so a paper title containing `<script>` becomes `&lt;script&gt;`).
-- `app/services/digest.deliver_email(s, user, task, papers)` — sends one email via `send_email` (mock backend in tests/dev, Resend in prod) and writes one `Delivery` row per paper with `channel='email'`. Empty `papers` short-circuits — no send, no rows. Subject is `🧪 <task.name> · <N> papers · <today>`.
-- 14 tests in `tests/unit/test_digest_rendering.py`: 11 rendering (HTML+text return, title/abstract presence in both, `et al.` truncation above 3 authors and absent at ≤3, abs+pdf links, custom pdf_url override, today/count/task-name in body, unsubscribe URL embedded, abstract truncation `…`, `<script>` autoescape, empty-papers no-crash); 3 delivery (one mock send + N Delivery rows, no-papers no-op, the (task_id,paper_id,channel) unique-constraint actually fires on duplicate paper).
+- `app/jobs/send_digests.py` exposes `run_send_digests()`. The cron iterates all users with `email_verified=True`, computes "now" in each user's tz (`user.tz` via `zoneinfo.ZoneInfo`, falling back to UTC if the string is invalid), and matches their tasks where `enabled=True AND delivery_time == local HH:MM AND "email" in delivery_channels`. For each match it runs T13's `select_papers_for_task` then T14's `deliver_email` (which itself writes the `Delivery` rows). The whole run is wrapped in `cron_run("send_digests")` and reports `digests_sent` (count of non-empty digests delivered) into `cron_runs.job_metadata`.
+- The MVP daily digest pipeline is now end-to-end functional minus APScheduler wiring (T22): T11 (embed) → T12 (fetch+vectors) → T13 (filter) → T14 (render+deliver) → T15 (schedule).
+- 9 integration tests in `tests/integration/test_send_digests_job.py`: happy path (Asia/Shanghai user, UTC=00:00 → local=08:00 fires), `cron_runs.digests_sent == 1`, skips unverified user, skips disabled task, skips on time mismatch, skips when `delivery_channels=["rss"]`, skips when no candidate papers (no email AND no Delivery rows), invalid-tz fallback to UTC, two-tz simultaneous fire (Asia/Shanghai user with delivery_time=08:00 + UTC user with delivery_time=00:00 both fire at UTC=00:00).
 
 ## Plan deviations / fixes
 
-- The plan loaded Jinja with bare `Environment(loader=FileSystemLoader(...))` — autoescape was OFF, meaning a paper title containing `<script>` would be injected verbatim into the email HTML. Fixed: `select_autoescape(["html"])` so `.html` autoescapes and `.txt` stays raw. Added an explicit test for the escape behavior.
-- The plan inlined `from app.config import get_settings` inside `deliver_email` to dodge a circular-import worry. There's no actual cycle (`app.config` doesn't import from `app.services`), so I moved it to the top.
-- The plan's single test asserted "title appears in HTML" only. Wrote 11 rendering tests covering each branch of the templates (author truncation both directions, abstract truncation, custom pdf_url override, autoescape, empty list) so future template edits get caught by the test suite.
-- The plan's `deliver_email` signature was `user` (untyped). Typed it as `User` so pyright catches argument-shape errors and call-sites get the right autocomplete.
-- Subject line: kept the plan's `🧪 <name> · <N> papers · <date>` format. The test asserts task name + paper count appear; the exact format is not load-bearing.
+- The plan caught the bad-tz case with bare `except Exception` then assigned `tz = ZoneInfo("UTC")`. Tightened to `except ZoneInfoNotFoundError` (the only thing that *should* go wrong here) and pulled `_UTC = ZoneInfo("UTC")` to module scope so we don't construct it on every loop iteration.
+- The plan inlined the local-time conversion in the loop body. Pulled it into `_user_local_hh_mm(now_utc, user_tz) -> str` to make the per-test "what HH:MM does this user see" check verifiable in isolation. (No new direct test of the helper, but the two-tz test exercises both branches.)
+- Added 6 tests beyond the plan's hand-wave (it had a single TODO test): unverified user, disabled task, time mismatch, RSS-only, no-papers, invalid tz, two-tz simultaneous. These cover all 4 filter conditions in the user→task→channel pipeline plus the timezone fallback.
+- Test fixtures use a `_FrozenDateTime` subclass + `patch("app.jobs.send_digests.datetime", ...)` to control `utcnow()` deterministically. Cleaner than `freezegun` for a single function, no new dep.
+- The plan's `await s.execute(select(...)).scalars().all()` pattern was replaced with `await s.scalars(select(...)).all()` — same result, one less hop, matches the style we settled on in T12+T13.
 
 ## Open issues / TODOs
 
+- Per-task failures still take down the whole cron run. T15's spec says "if one task explodes, the run fails and is re-runnable" — that's what we have. T22 (APScheduler wiring) or a future hardening pass should add per-task try/except so one bad task doesn't block others.
 - `socksio==1.0.0` transitive dep — fine.
 - Cookie `secure=False` still hardcoded — T22 / T27.
-- `datetime.utcnow()`: 443 warnings (up from 424; rendering tests instantiate Paper rows). Sweep around T15.
+- `datetime.utcnow()`: 520 warnings (up from 443; cron_log + send_digests are hot paths). Sweep around T15. **Still pending — not done in T15 either; cron_log and the new job both still use utcnow().** Calling this out as the explicit next-cycle cleanup.
 - `DEVELOPMENT_GUIDE.md` §11 wording (passlib → bcrypt) still pending.
-- Real arXiv API + real OpenAI embeddings still never hit by tests; the send-digest cron (T15) wires `select_papers_for_task` + `deliver_email` together but still mocks externals.
-- The `xivLab · manage subscription` footer text isn't translatable. Fine for MVP — i18n is post-1.0.
-- Email `From:` header currently hardcoded to `noreply@xivlab.local` via `settings.resend_from_email`. Real domain swap happens at deploy.
+- Real arXiv API + real OpenAI embeddings still never hit by tests; the send-digest cron mocks `datetime.utcnow` and reads from already-seeded `papers`. First live exercise is the manual smoke test before deploy (T26).
+- `delivery_time` is matched as a literal string at the minute resolution. If APScheduler fires at 08:00:30 and `datetime.utcnow().replace(second=0)` lands on 08:00, we match — but if drift pushes us to 08:01, we miss the day's digest entirely. T22 should fire on the 0th second to be safe; if not, we'd need a "missed-window catch-up" pass.
 
-## What's next (T15 high-level reminder)
+## What's next (T16 high-level reminder)
 
-T15 is the send_digests cron job:
-- `app/jobs/send_digests.py` — iterates enabled tasks whose owner has `email_verified=True`, calls `select_papers_for_task` + `deliver_email`. Wraps the full run in `cron_run("send_digests")` (T12's helper) so success/failure + per-run metrics (`tasks_processed`, `emails_sent`, `papers_delivered`) land in `cron_runs.job_metadata`.
-- Per-task failures should NOT abort the whole job — log the error, mark just that task's metrics, continue. The cron-runs row stays `success` if at least one task delivered. (Or maybe `success_with_partial_failures` — TBD by the plan text.)
-- `tests/integration/test_send_digests_job.py` — autouse `_reset_db`, seed two users with two tasks each, mock arxiv to populate papers, run the job, assert MockEmailBackend.sent has the right count and the per-task Delivery rows exist.
-- T15 closes the loop: T11 (embed) → T12 (fetch+vectors) → T13 (filter) → T14 (render+deliver) → T15 (schedule). After T15, the daily digest pipeline is end-to-end functional minus the APScheduler wiring (T22).
+T16 is the RSS feed renderer + endpoint:
+- `app/services/feed_renderer.py` — pure function rendering a list of `Paper` rows into RSS 2.0 XML. One `<item>` per paper with title, link to arxiv abs page, description (abstract truncated), pubDate.
+- `app/routers/rss.py` — `GET /rss/{rss_token}` endpoint. Looks up the task by `rss_token`, calls `select_papers_for_task` (or a relaxed variant — RSS shouldn't dedupe via `Delivery` filter since it's pull-based, so likely a new `select_papers_for_rss` or a flag), renders, returns `application/rss+xml`. The T13 pipeline already excludes RSS deliveries from the email-dedup filter, so we just need to NOT write `Delivery(channel='rss')` rows from the endpoint (or write them and accept that the feed self-rotates as new papers arrive).
+- Tests: 401-ish on bad token, 200 with valid XML on good token, papers actually appear in `<item>` tags.
