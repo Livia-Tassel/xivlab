@@ -2378,7 +2378,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 - Create: `tests/fixtures/embedding_seed.py`
 - Test: `tests/unit/test_embedding.py`
 
-- [ ] **Step 1: Test (RED)**
+- [x] **Step 1: Test (RED)**
 
 `tests/unit/test_embedding.py`:
 
@@ -2399,7 +2399,7 @@ async def test_different_text_different_embedding():
     assert a != b
 ```
 
-- [ ] **Step 2: Implementation**
+- [x] **Step 2: Implementation**
 
 ```python
 import hashlib
@@ -2464,15 +2464,7 @@ def from_blob(blob: bytes) -> list[float]:
     return list(struct.unpack(f"{n}f", blob))
 ```
 
-- [ ] **Step 3: Run tests + commit**
-
-```bash
-uv run pytest tests/unit/test_embedding.py -v
-git add app/services/embedding.py tests/
-git commit -m "feat: embedding: add provider-agnostic embedding service with mock backend
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
-```
+- [x] **Step 3: Run tests + commit**
 
 ---
 
