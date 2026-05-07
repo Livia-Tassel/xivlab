@@ -670,6 +670,350 @@ async def category_page(
     )
 
 
+# --- PromptHub: detail + author dashboard ----------------------------------
+
+
+def _split_tags(raw: str | None) -> list[str]:
+    if not raw:
+        return []
+    return [t.strip() for t in raw.split(",") if t.strip()]
+
+
+@router.get("/p/{slug}", response_class=HTMLResponse)
+async def prompt_detail_page(
+    request: Request,
+    slug: str,
+    session: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+) -> Response:
+    user = await _try_user(session)
+    async with session_scope() as s:
+        row = (
+            await s.execute(
+                select(Prompt, PromptCategory)
+                .join(PromptCategory, PromptCategory.id == Prompt.category_id)
+                .where(Prompt.slug == slug)
+            )
+        ).one_or_none()
+        if row is None:
+            return Response(status_code=404, content="Prompt not found")
+        prompt, category = row
+        if prompt.status != "published" and (user is None or user.id != prompt.author_user_id):
+            return Response(status_code=404, content="Prompt not found")
+        prompt.views += 1
+        await s.commit()
+        await s.refresh(prompt)
+    return templates.TemplateResponse(
+        request,
+        "pages/prompt_detail.html",
+        {"user": user, "prompt": prompt, "category": category},
+    )
+
+
+@router.get("/dashboard/prompts", response_class=HTMLResponse)
+async def my_prompts_page(
+    request: Request,
+    session: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+) -> Response:
+    user, redirect = await _verified_user_or_redirect(session)
+    if redirect is not None:
+        return redirect
+    assert user is not None
+    async with session_scope() as s:
+        prompts = list(
+            (
+                await s.execute(
+                    select(Prompt)
+                    .where(
+                        Prompt.author_user_id == user.id,
+                        Prompt.status != "deleted",
+                    )
+                    .order_by(Prompt.created_at.desc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+    return templates.TemplateResponse(
+        request,
+        "dashboard/prompts.html",
+        {"user": user, "prompts": prompts},
+    )
+
+
+async def _all_categories() -> list[PromptCategory]:
+    async with session_scope() as s:
+        return list(
+            (await s.execute(select(PromptCategory).order_by(PromptCategory.sort_order)))
+            .scalars()
+            .all()
+        )
+
+
+@router.get("/dashboard/prompts/new", response_class=HTMLResponse)
+async def new_prompt_page(
+    request: Request,
+    session: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+) -> Response:
+    user, redirect = await _verified_user_or_redirect(session)
+    if redirect is not None:
+        return redirect
+    assert user is not None
+    return templates.TemplateResponse(
+        request,
+        "pages/prompt_form.html",
+        {
+            "user": user,
+            "prompt": None,
+            "form": None,
+            "categories": await _all_categories(),
+        },
+    )
+
+
+def _form_dict(
+    title: str,
+    description: str,
+    body: str,
+    category_slug: str,
+    tags: str,
+    language: str,
+    example_input: str,
+    example_output: str,
+) -> dict[str, str]:
+    return {
+        "title": title,
+        "description": description,
+        "body": body,
+        "category_slug": category_slug,
+        "tags": tags,
+        "language": language,
+        "example_input": example_input,
+        "example_output": example_output,
+    }
+
+
+@router.post("/dashboard/prompts")
+async def create_prompt_submit(
+    request: Request,
+    title: Annotated[str, Form()],
+    body: Annotated[str, Form()],
+    category_slug: Annotated[str, Form()],
+    description: Annotated[str, Form()] = "",
+    tags: Annotated[str, Form()] = "",
+    language: Annotated[str, Form()] = "zh",
+    example_input: Annotated[str, Form()] = "",
+    example_output: Annotated[str, Form()] = "",
+    session: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+) -> Response:
+    user, redirect = await _verified_user_or_redirect(session)
+    if redirect is not None:
+        return redirect
+    assert user is not None
+
+    form = _form_dict(
+        title, description, body, category_slug, tags, language, example_input, example_output
+    )
+
+    if len(title) > 200:
+        return templates.TemplateResponse(
+            request,
+            "pages/prompt_form.html",
+            {
+                "user": user,
+                "prompt": None,
+                "form": form,
+                "categories": await _all_categories(),
+                "error": "Title must be 200 characters or fewer.",
+            },
+            status_code=422,
+        )
+    if len(body) > 5000:
+        return templates.TemplateResponse(
+            request,
+            "pages/prompt_form.html",
+            {
+                "user": user,
+                "prompt": None,
+                "form": form,
+                "categories": await _all_categories(),
+                "error": "Body must be 5000 characters or fewer.",
+            },
+            status_code=422,
+        )
+
+    async with session_scope() as s:
+        cat = (
+            await s.execute(select(PromptCategory).where(PromptCategory.slug == category_slug))
+        ).scalar_one_or_none()
+        if cat is None:
+            return templates.TemplateResponse(
+                request,
+                "pages/prompt_form.html",
+                {
+                    "user": user,
+                    "prompt": None,
+                    "form": form,
+                    "categories": await _all_categories(),
+                    "error": f"Unknown category: {category_slug}",
+                },
+                status_code=400,
+            )
+
+        # Daily limit of 5
+        from app.routers.prompts import DAILY_PROMPT_LIMIT
+
+        day_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        from sqlalchemy import func
+
+        count_today = (
+            await s.execute(
+                select(func.count())
+                .select_from(Prompt)
+                .where(Prompt.author_user_id == user.id, Prompt.created_at >= day_start)
+            )
+        ).scalar_one()
+        if count_today >= DAILY_PROMPT_LIMIT:
+            return templates.TemplateResponse(
+                request,
+                "pages/prompt_form.html",
+                {
+                    "user": user,
+                    "prompt": None,
+                    "form": form,
+                    "categories": await _all_categories(),
+                    "error": f"Daily limit reached ({DAILY_PROMPT_LIMIT}/day).",
+                },
+                status_code=429,
+            )
+
+        from app.routers.prompts import _unique_slug
+        from app.services.slug import slugify
+
+        slug = await _unique_slug(s, slugify(title))
+        s.add(
+            Prompt(
+                slug=slug,
+                title=title,
+                description=description.strip() or None,
+                body=body,
+                category_id=cat.id,
+                tags=_split_tags(tags),
+                example_input=example_input.strip() or None,
+                example_output=example_output.strip() or None,
+                author_user_id=user.id,
+                language=language,
+                status="pending",
+            )
+        )
+        await s.commit()
+
+    return RedirectResponse("/dashboard/prompts", status_code=303)
+
+
+@router.get("/dashboard/prompts/{prompt_id}", response_class=HTMLResponse)
+async def edit_prompt_page(
+    request: Request,
+    prompt_id: int,
+    session: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+) -> Response:
+    user, redirect = await _verified_user_or_redirect(session)
+    if redirect is not None:
+        return redirect
+    assert user is not None
+    async with session_scope() as s:
+        row = (
+            await s.execute(
+                select(Prompt, PromptCategory.slug)
+                .join(PromptCategory, PromptCategory.id == Prompt.category_id)
+                .where(Prompt.id == prompt_id, Prompt.author_user_id == user.id)
+            )
+        ).one_or_none()
+        if row is None:
+            return Response(status_code=404, content="Not found")
+        prompt, cat_slug = row
+        # Pass a small shim with category_slug for the template's selected option.
+        prompt.__dict__["category_slug"] = cat_slug
+    return templates.TemplateResponse(
+        request,
+        "pages/prompt_form.html",
+        {
+            "user": user,
+            "prompt": prompt,
+            "form": None,
+            "categories": await _all_categories(),
+        },
+    )
+
+
+@router.post("/dashboard/prompts/{prompt_id}")
+async def update_prompt_submit(
+    request: Request,
+    prompt_id: int,
+    title: Annotated[str, Form()],
+    body: Annotated[str, Form()],
+    category_slug: Annotated[str, Form()],
+    description: Annotated[str, Form()] = "",
+    tags: Annotated[str, Form()] = "",
+    language: Annotated[str, Form()] = "zh",
+    example_input: Annotated[str, Form()] = "",
+    example_output: Annotated[str, Form()] = "",
+    session: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+) -> Response:
+    user, redirect = await _verified_user_or_redirect(session)
+    if redirect is not None:
+        return redirect
+    assert user is not None
+
+    async with session_scope() as s:
+        prompt = (
+            await s.execute(
+                select(Prompt).where(Prompt.id == prompt_id, Prompt.author_user_id == user.id)
+            )
+        ).scalar_one_or_none()
+        if prompt is None:
+            return Response(status_code=404, content="Not found")
+
+        cat = (
+            await s.execute(select(PromptCategory).where(PromptCategory.slug == category_slug))
+        ).scalar_one_or_none()
+        if cat is None:
+            return Response(status_code=400, content="Unknown category")
+
+        prompt.title = title
+        prompt.description = description.strip() or None
+        prompt.body = body
+        prompt.category_id = cat.id
+        prompt.tags = _split_tags(tags)
+        prompt.language = language
+        prompt.example_input = example_input.strip() or None
+        prompt.example_output = example_output.strip() or None
+        prompt.status = "pending"
+        await s.commit()
+
+    return RedirectResponse("/dashboard/prompts", status_code=303)
+
+
+@router.post("/dashboard/prompts/{prompt_id}/delete")
+async def delete_prompt_submit(
+    prompt_id: int,
+    session: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+) -> Response:
+    user, redirect = await _verified_user_or_redirect(session)
+    if redirect is not None:
+        return redirect
+    assert user is not None
+    async with session_scope() as s:
+        prompt = (
+            await s.execute(
+                select(Prompt).where(Prompt.id == prompt_id, Prompt.author_user_id == user.id)
+            )
+        ).scalar_one_or_none()
+        if prompt is not None:
+            prompt.status = "deleted"
+            await s.commit()
+    return RedirectResponse("/dashboard/prompts", status_code=303)
+
+
 # Compatibility shim — `DEFAULT_MAX_TASKS` is exported but the dashboard
 # reads the per-user value via ``get_or_create_quota``. Re-export so module
 # imports stay tidy.

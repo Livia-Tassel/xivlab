@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{% if prompt %}Edit Prompt{% else %}Submit Prompt{% endif %} — xivLab{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">{% if prompt %}Edit Prompt{% else %}Submit a Prompt{% endif %}</h1>
+
+{% if error %}<div class="bg-red-50 border border-red-200 text-red-800 rounded p-3 mb-4 text-sm">{{ error }}</div>{% endif %}
+
+<form method="post" action="{% if prompt %}/dashboard/prompts/{{ prompt.id }}{% else %}/dashboard/prompts{% endif %}" class="space-y-4 bg-white border rounded p-6">
+  <div>
+    <label class="block text-sm font-medium mb-1">Title <span class="text-red-500">*</span></label>
+    <input name="title" required maxlength="200" class="w-full border rounded px-3 py-2"
+           value="{{ form.title if form else (prompt.title if prompt else '') }}">
+  </div>
+
+  <div>
+    <label class="block text-sm font-medium mb-1">Description</label>
+    <input name="description" maxlength="500" class="w-full border rounded px-3 py-2"
+           value="{{ form.description if form else (prompt.description if prompt else '') }}">
+  </div>
+
+  <div>
+    <label class="block text-sm font-medium mb-1">Category <span class="text-red-500">*</span></label>
+    <select name="category_slug" required class="w-full border rounded px-3 py-2">
+      {% for c in categories %}
+      <option value="{{ c.slug }}"
+        {% if form and form.category_slug == c.slug %}selected{% elif prompt and prompt.category_slug == c.slug %}selected{% endif %}>
+        {{ c.name }}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div>
+    <label class="block text-sm font-medium mb-1">Body <span class="text-red-500">*</span></label>
+    <textarea name="body" required rows="10" maxlength="5000"
+              class="w-full border rounded px-3 py-2 font-mono text-sm">{{ form.body if form else (prompt.body if prompt else '') }}</textarea>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+    <div>
+      <label class="block text-sm font-medium mb-1">Example input</label>
+      <textarea name="example_input" rows="3" maxlength="5000"
+                class="w-full border rounded px-3 py-2 font-mono text-sm">{{ form.example_input if form else (prompt.example_input if prompt else '') }}</textarea>
+    </div>
+    <div>
+      <label class="block text-sm font-medium mb-1">Example output</label>
+      <textarea name="example_output" rows="3" maxlength="5000"
+                class="w-full border rounded px-3 py-2 font-mono text-sm">{{ form.example_output if form else (prompt.example_output if prompt else '') }}</textarea>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+    <div>
+      <label class="block text-sm font-medium mb-1">Tags (comma-separated)</label>
+      <input name="tags" class="w-full border rounded px-3 py-2"
+             value="{{ form.tags if form else (','.join(prompt.tags) if prompt else '') }}">
+    </div>
+    <div>
+      <label class="block text-sm font-medium mb-1">Language</label>
+      <select name="language" class="w-full border rounded px-3 py-2">
+        {% set cur_lang = form.language if form else (prompt.language if prompt else 'zh') %}
+        <option value="zh" {% if cur_lang == 'zh' %}selected{% endif %}>中文</option>
+        <option value="en" {% if cur_lang == 'en' %}selected{% endif %}>English</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="flex items-center gap-3">
+    <button class="px-4 py-2 bg-zinc-900 text-white rounded hover:bg-zinc-700">
+      {% if prompt %}Save changes{% else %}Submit for review{% endif %}
+    </button>
+    <a href="/dashboard/prompts" class="text-sm text-zinc-500 hover:underline">Cancel</a>
+  </div>
+</form>
+{% endblock %}

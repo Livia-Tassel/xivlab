@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{{ prompt.title }} — xivLab{% endblock %}
+{% block content %}
+<nav class="text-sm text-zinc-500 mb-3">
+  <a href="/" class="hover:underline">PromptHub</a> /
+  <a href="/c/{{ category.slug }}" class="hover:underline">{{ category.name }}</a> /
+  <span>{{ prompt.title }}</span>
+</nav>
+
+<article class="bg-white border rounded p-6">
+  <header class="mb-4">
+    <h1 class="text-2xl font-bold">{{ prompt.title }}</h1>
+    {% if prompt.description %}<p class="text-zinc-600 mt-2">{{ prompt.description }}</p>{% endif %}
+    <div class="text-xs text-zinc-500 mt-3">
+      ▲ <span id="upvotes-{{ prompt.id }}">{{ prompt.upvotes }}</span> · 📋 <span id="copies-{{ prompt.id }}">{{ prompt.copies }}</span> · 👁 {{ prompt.views }}
+      · <span class="ml-2 px-2 rounded bg-zinc-100">{{ prompt.language }}</span>
+      {% if prompt.tags %}
+        {% for t in prompt.tags %}<span class="ml-1 px-2 rounded bg-blue-50 text-blue-700">{{ t }}</span>{% endfor %}
+      {% endif %}
+    </div>
+  </header>
+
+  <section class="mb-4">
+    <div class="flex items-center justify-between mb-1">
+      <h2 class="text-sm font-semibold text-zinc-700">Body</h2>
+      <div class="space-x-2 text-sm">
+        {% if user %}
+        <button hx-post="/api/v1/prompts/{{ prompt.id }}/vote"
+                hx-swap="none"
+                onclick="this.disabled=true; setTimeout(()=>this.disabled=false, 1500);"
+                class="px-3 py-1 rounded bg-zinc-100 hover:bg-zinc-200">▲ Upvote</button>
+        <button hx-post="/api/v1/prompts/{{ prompt.id }}/copy"
+                hx-swap="none"
+                onclick="navigator.clipboard.writeText(document.getElementById('prompt-body').innerText)"
+                class="px-3 py-1 rounded bg-zinc-100 hover:bg-zinc-200">📋 Copy</button>
+        {% else %}
+        <span class="text-zinc-500">Login to vote / copy</span>
+        {% endif %}
+      </div>
+    </div>
+    <pre id="prompt-body" class="bg-zinc-50 border rounded p-4 text-sm overflow-x-auto whitespace-pre-wrap">{{ prompt.body }}</pre>
+  </section>
+
+  {% if prompt.example_input or prompt.example_output %}
+  <section class="grid grid-cols-1 md:grid-cols-2 gap-3">
+    {% if prompt.example_input %}
+    <div>
+      <h3 class="text-sm font-semibold text-zinc-700 mb-1">Example input</h3>
+      <pre class="bg-zinc-50 border rounded p-3 text-xs whitespace-pre-wrap">{{ prompt.example_input }}</pre>
+    </div>
+    {% endif %}
+    {% if prompt.example_output %}
+    <div>
+      <h3 class="text-sm font-semibold text-zinc-700 mb-1">Example output</h3>
+      <pre class="bg-zinc-50 border rounded p-3 text-xs whitespace-pre-wrap">{{ prompt.example_output }}</pre>
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
+</article>
+{% endblock %}
