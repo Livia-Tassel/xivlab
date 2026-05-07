@@ -75,3 +75,7 @@ uv run python scripts/create_admin.py
 和 [实施计划](docs/superpowers/plans/2026-05-04-xivlab-implementation.md)。
 
 简言之：单进程 FastAPI + APScheduler in-process 负责 cron；服务器端渲染（Jinja2 + HTMX）；SQLite + sqlite-vec 既存元数据也存语义向量。
+
+## Changelog
+
+详见 [CHANGELOG.md](CHANGELOG.md)。
