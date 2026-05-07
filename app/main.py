@@ -5,6 +5,7 @@ from app.config import PROJECT_ROOT, get_settings
 from app.routers import auth as auth_router
 from app.routers import me as me_router
 from app.routers import pages as pages_router
+from app.routers import prompts as prompts_router
 from app.routers import rss as rss_router
 from app.routers import tasks as tasks_router
 
@@ -29,6 +30,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router.router)
     app.include_router(me_router.router)
     app.include_router(tasks_router.router)
+    app.include_router(prompts_router.router)
     app.include_router(rss_router.router)
     app.include_router(pages_router.router)
     return app
