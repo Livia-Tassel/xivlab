@@ -1014,6 +1014,48 @@ async def delete_prompt_submit(
     return RedirectResponse("/dashboard/prompts", status_code=303)
 
 
+# --- Admin queue page ------------------------------------------------------
+
+
+@router.get("/admin/queue", response_class=HTMLResponse)
+async def admin_queue_page(
+    request: Request,
+    session: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+) -> Response:
+    user = await _try_user(session)
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    if not user.is_admin:
+        return Response(status_code=403, content="Admin only")
+    async with session_scope() as s:
+        rows = (
+            await s.execute(
+                select(Prompt, PromptCategory.slug, User.email)
+                .join(PromptCategory, PromptCategory.id == Prompt.category_id)
+                .join(User, User.id == Prompt.author_user_id)
+                .where(Prompt.status == "pending")
+                .order_by(Prompt.created_at.asc())
+            )
+        ).all()
+        prompts = [
+            {
+                "id": p.id,
+                "title": p.title,
+                "description": p.description,
+                "body": p.body,
+                "category_slug": cs,
+                "language": p.language,
+                "author_email": em,
+            }
+            for p, cs, em in rows
+        ]
+    return templates.TemplateResponse(
+        request,
+        "admin/queue.html",
+        {"user": user, "prompts": prompts},
+    )
+
+
 # Compatibility shim — `DEFAULT_MAX_TASKS` is exported but the dashboard
 # reads the per-user value via ``get_or_create_quota``. Re-export so module
 # imports stay tidy.

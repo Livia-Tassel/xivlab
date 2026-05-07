@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.config import PROJECT_ROOT, get_settings
+from app.routers import admin as admin_router
 from app.routers import auth as auth_router
 from app.routers import categories as categories_router
 from app.routers import me as me_router
@@ -33,6 +34,7 @@ def create_app() -> FastAPI:
     app.include_router(tasks_router.router)
     app.include_router(prompts_router.router)
     app.include_router(categories_router.router)
+    app.include_router(admin_router.router)
     app.include_router(rss_router.router)
     app.include_router(pages_router.router)
     return app
