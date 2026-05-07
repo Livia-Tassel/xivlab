@@ -19,6 +19,8 @@ from app.deps import COOKIE_NAME, current_user
 from app.models import (
     EmailVerificationToken,
     PasswordResetToken,
+    Prompt,
+    PromptCategory,
     Task,
     User,
 )
@@ -596,6 +598,76 @@ async def regenerate_rss_submit(
             task.rss_token = random_token(32)
             await s.commit()
     return RedirectResponse("/dashboard", status_code=303)
+
+
+# --- PromptHub: home + category --------------------------------------------
+
+
+HOME_PROMPTS_PER_CATEGORY: int = 5
+
+
+@router.get("/", response_class=HTMLResponse)
+async def home_page(
+    request: Request,
+    session: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+) -> Response:
+    user = await _try_user(session)
+    async with session_scope() as s:
+        cats = list(
+            (await s.execute(select(PromptCategory).order_by(PromptCategory.sort_order)))
+            .scalars()
+            .all()
+        )
+        groups: list[tuple[PromptCategory, list[Prompt]]] = []
+        for cat in cats:
+            prompts = list(
+                (
+                    await s.execute(
+                        select(Prompt)
+                        .where(
+                            Prompt.category_id == cat.id,
+                            Prompt.status == "published",
+                        )
+                        .order_by(Prompt.upvotes.desc(), Prompt.created_at.desc())
+                        .limit(HOME_PROMPTS_PER_CATEGORY)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            groups.append((cat, prompts))
+    return templates.TemplateResponse(
+        request,
+        "pages/home.html",
+        {"user": user, "groups": groups},
+    )
+
+
+@router.get("/c/{slug}", response_class=HTMLResponse)
+async def category_page(
+    request: Request,
+    slug: str,
+    sort: str = "new",
+    session: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+) -> Response:
+    user = await _try_user(session)
+    async with session_scope() as s:
+        cat = (
+            await s.execute(select(PromptCategory).where(PromptCategory.slug == slug))
+        ).scalar_one_or_none()
+        if cat is None:
+            return Response(status_code=404, content="Category not found")
+        stmt = select(Prompt).where(Prompt.category_id == cat.id, Prompt.status == "published")
+        if sort == "hot":
+            stmt = stmt.order_by(Prompt.upvotes.desc(), Prompt.created_at.desc())
+        else:
+            stmt = stmt.order_by(Prompt.created_at.desc())
+        prompts = list((await s.execute(stmt)).scalars().all())
+    return templates.TemplateResponse(
+        request,
+        "pages/category.html",
+        {"user": user, "category": cat, "prompts": prompts, "sort": sort},
+    )
 
 
 # Compatibility shim — `DEFAULT_MAX_TASKS` is exported but the dashboard

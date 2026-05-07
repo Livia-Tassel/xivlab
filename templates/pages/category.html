@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ category.name }} — xivLab{% endblock %}
+{% block content %}
+<nav class="text-sm text-zinc-500 mb-3">
+  <a href="/" class="hover:underline">PromptHub</a> /
+  <span>{{ category.name }}</span>
+</nav>
+
+<section class="mb-6 flex items-baseline justify-between">
+  <div>
+    <h1 class="text-2xl font-bold">
+      <span class="mr-1">{{ category.icon or "" }}</span>{{ category.name }}
+    </h1>
+    {% if category.description %}<p class="text-zinc-600 mt-1">{{ category.description }}</p>{% endif %}
+  </div>
+  <div class="space-x-2 text-sm">
+    <a href="/c/{{ category.slug }}?sort=new" class="px-2 py-1 rounded {% if sort == 'new' %}bg-zinc-900 text-white{% else %}bg-zinc-100 hover:bg-zinc-200{% endif %}">New</a>
+    <a href="/c/{{ category.slug }}?sort=hot" class="px-2 py-1 rounded {% if sort == 'hot' %}bg-zinc-900 text-white{% else %}bg-zinc-100 hover:bg-zinc-200{% endif %}">Hot</a>
+  </div>
+</section>
+
+{% if prompts %}
+<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+  {% for p in prompts %}
+  <a href="/p/{{ p.slug }}" class="block bg-white border rounded p-4 hover:shadow-sm transition">
+    <div class="font-medium">{{ p.title }}</div>
+    {% if p.description %}<div class="text-sm text-zinc-600 mt-1 line-clamp-2">{{ p.description }}</div>{% endif %}
+    <div class="text-xs text-zinc-500 mt-2">▲ {{ p.upvotes }} · 📋 {{ p.copies }} · 👁 {{ p.views }}</div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<p class="text-zinc-500">No prompts in this category yet.</p>
+{% endif %}
+{% endblock %}
